@@ -26,6 +26,7 @@ jobs:
         working-directory: client_app
         run: |
           flutter create --platforms=android .
+          rm -f test/widget_test.dart
 
       - name: Flutter Pub Get
         working-directory: client_app
