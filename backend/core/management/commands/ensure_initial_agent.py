@@ -44,11 +44,11 @@ class Command(BaseCommand):
             defaults={
                 "student_id": student_id or None,
                 "display_name": display_name,
-                "role": User.Role.AGENT,
+                "role": "AGENT",
             },
         )
 
-        profile.role = User.Role.AGENT
+        profile.role = "AGENT"
         profile.display_name = display_name
 
         if student_id:
