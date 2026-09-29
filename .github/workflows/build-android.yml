@@ -28,6 +28,26 @@ jobs:
           flutter create --platforms=android .
           rm -f test/widget_test.dart
 
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          permission = '<uses-permission android:name="android.permission.INTERNET"/>'
+
+          if permission not in text:
+              text = text.replace(
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission,
+              )
+
+          manifest.write_text(text)
+          PY
+
+          echo "Android INTERNET permission:"
+          grep -n "INTERNET" android/app/src/main/AndroidManifest.xml || true
+
       - name: Flutter Pub Get
         working-directory: client_app
         run: flutter pub get
