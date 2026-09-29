@@ -1,60 +1,199 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Base URL is injected at build time:
-/// flutter build apk --dart-define=API_BASE_URL=https://law-union-backend.onrender.com
+
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8000',
+  defaultValue: 'https://law-union-backend.onrender.com',
 );
+
 
 class ApiException implements Exception {
   final String message;
-  ApiException(this.message);
+  final int? statusCode;
+
+  ApiException(
+    this.message, {
+    this.statusCode,
+  });
+
   @override
   String toString() => message;
 }
 
-class ApiClient {
-  static const _tokenKey = 'auth_token';
 
-  Future<String?> get _token async =>
-      (await SharedPreferences.getInstance()).getString(_tokenKey);
+class ApiClient {
+  static const String _tokenKey = 'auth_token';
+
+
+  Future<String?> get _token async {
+    final prefs = await SharedPreferences.getInstance();
+
+    return prefs.getString(_tokenKey);
+  }
+
 
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+
+    await prefs.setString(
+      _tokenKey,
+      token,
+    );
   }
+
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+
     await prefs.remove(_tokenKey);
   }
 
-  Future<Map<String, String>> _headers({bool json = true}) async {
+
+  Future<Map<String, String>> _headers({
+    bool json = true,
+  }) async {
     final token = await _token;
+
     return {
-      if (json) 'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Token $token',
+      if (json)
+        'Content-Type': 'application/json',
+
+      'Accept': 'application/json',
+
+      if (token != null && token.isNotEmpty)
+        'Authorization': 'Token $token',
     };
   }
 
-  Uri _u(String path) => Uri.parse('$kApiBaseUrl$path');
 
-  Future<Map<String, dynamic>> login(String username, String password) async {
-    final res = await http.post(
-      _u('/api/auth/login/'),
-      headers: await _headers(),
-      body: jsonEncode({'username': username, 'password': password}),
+  Uri _uri(
+    String path,
+  ) {
+    final base = kApiBaseUrl.endsWith('/')
+        ? kApiBaseUrl.substring(
+            0,
+            kApiBaseUrl.length - 1,
+          )
+        : kApiBaseUrl;
+
+    return Uri.parse(
+      '$base$path',
     );
-    final data = jsonDecode(res.body);
-    if (res.statusCode != 200) {
-      throw ApiException(data['detail']?.toString() ?? 'فشل تسجيل الدخول');
-    }
-    await _saveToken(data['token']);
-    return data;
   }
+
+
+  dynamic _decode(http.Response response) {
+    if (response.body.isEmpty) {
+      return {};
+    }
+
+    try {
+      return jsonDecode(response.body);
+    } catch (_) {
+      return {
+        'detail': response.body,
+      };
+    }
+  }
+
+
+  String _errorMessage(
+    dynamic data,
+    String fallback,
+  ) {
+    if (data is Map<String, dynamic>) {
+      final detail = data['detail'];
+
+      if (detail != null) {
+        return detail.toString();
+      }
+
+      final firstError = data.values.firstOrNull;
+
+      if (firstError != null) {
+        if (firstError is List && firstError.isNotEmpty) {
+          return firstError.first.toString();
+        }
+
+        return firstError.toString();
+      }
+    }
+
+    return fallback;
+  }
+
+
+  Future<Map<String, dynamic>> health() async {
+    final response = await http.get(
+      _uri('/api/health/'),
+      headers: await _headers(
+        json: false,
+      ),
+    );
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Backend health check failed.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+
+    return Map<String, dynamic>.from(
+      data as Map,
+    );
+  }
+
+
+  Future<Map<String, dynamic>> login(
+    String username,
+    String password,
+  ) async {
+    final response = await http.post(
+      _uri('/api/auth/login/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'username': username,
+        'password': password,
+      }),
+    );
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Sign in failed.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+
+    final token = data['token'];
+
+    if (token == null || token.toString().isEmpty) {
+      throw ApiException(
+        'The server did not return an authentication token.',
+      );
+    }
+
+    await _saveToken(
+      token.toString(),
+    );
+
+    return Map<String, dynamic>.from(
+      data as Map,
+    );
+  }
+
 
   Future<Map<String, dynamic>> register({
     required String username,
@@ -62,8 +201,8 @@ class ApiClient {
     required String studentId,
     required String displayName,
   }) async {
-    final res = await http.post(
-      _u('/api/auth/register/'),
+    final response = await http.post(
+      _uri('/api/auth/register/'),
       headers: await _headers(),
       body: jsonEncode({
         'username': username,
@@ -72,47 +211,197 @@ class ApiClient {
         'display_name': displayName,
       }),
     );
-    final data = jsonDecode(res.body);
-    if (res.statusCode != 201) {
-      throw ApiException(data.toString());
+
+    final data = _decode(response);
+
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Registration failed.',
+        ),
+        statusCode: response.statusCode,
+      );
     }
-    await _saveToken(data['token']);
-    return data;
+
+    final token = data['token'];
+
+    if (token != null) {
+      await _saveToken(
+        token.toString(),
+      );
+    }
+
+    return Map<String, dynamic>.from(
+      data as Map,
+    );
   }
+
+
+  Future<Map<String, dynamic>> me() async {
+    final response = await http.get(
+      _uri('/api/auth/me/'),
+      headers: await _headers(),
+    );
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Unable to load profile.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+
+    return Map<String, dynamic>.from(
+      data as Map,
+    );
+  }
+
 
   Future<List<dynamic>> getHubs() async {
-    final res = await http.get(_u('/api/hubs/'), headers: await _headers());
-    if (res.statusCode != 200) throw ApiException('تعذر تحميل الأقسام');
-    final data = jsonDecode(res.body);
-    return data is List ? data : data['results'] ?? [];
-  }
-
-  Future<List<dynamic>> getPosts(int hubId) async {
-    final res = await http.get(
-      _u('/api/posts/?hub=$hubId'),
+    final response = await http.get(
+      _uri('/api/hubs/'),
       headers: await _headers(),
     );
-    if (res.statusCode != 200) throw ApiException('تعذر تحميل المنشورات');
-    final data = jsonDecode(res.body);
-    return data is List ? data : data['results'] ?? [];
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Unable to load community data.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+
+    if (data is List) {
+      return data;
+    }
+
+    if (data is Map<String, dynamic>) {
+      final results = data['results'];
+
+      if (results is List) {
+        return results;
+      }
+    }
+
+    return [];
   }
 
-  Future<void> createPost(int hubId, String body) async {
-    final res = await http.post(
-      _u('/api/posts/'),
+
+  Future<List<dynamic>> getPosts(
+    int hubId,
+  ) async {
+    final response = await http.get(
+      _uri('/api/posts/?hub=$hubId'),
       headers: await _headers(),
-      body: jsonEncode({'hub': hubId, 'body': body}),
     );
-    if (res.statusCode != 201) throw ApiException('تعذر نشر المنشور');
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Unable to load posts.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+
+    if (data is List) {
+      return data;
+    }
+
+    if (data is Map<String, dynamic>) {
+      final results = data['results'];
+
+      if (results is List) {
+        return results;
+      }
+    }
+
+    return [];
   }
 
-  Future<List<dynamic>> getMessages(int roomId) async {
-    final res = await http.get(
-      _u('/api/messages/?room=$roomId'),
+
+  Future<void> createPost(
+    int hubId,
+    String body,
+  ) async {
+    final response = await http.post(
+      _uri('/api/posts/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'hub': hubId,
+        'body': body,
+      }),
+    );
+
+    if (response.statusCode != 201) {
+      final data = _decode(response);
+
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Unable to publish post.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+
+  Future<List<dynamic>> getMessages(
+    int roomId,
+  ) async {
+    final response = await http.get(
+      _uri('/api/messages/?room=$roomId'),
       headers: await _headers(),
     );
-    if (res.statusCode != 200) throw ApiException('تعذر تحميل الرسائل');
-    final data = jsonDecode(res.body);
-    return data is List ? data : data['results'] ?? [];
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(
+          data,
+          'Unable to load messages.',
+        ),
+        statusCode: response.statusCode,
+      );
+    }
+
+    if (data is List) {
+      return data;
+    }
+
+    if (data is Map<String, dynamic>) {
+      final results = data['results'];
+
+      if (results is List) {
+        return results;
+      }
+    }
+
+    return [];
+  }
+}
+
+
+extension FirstOrNullExtension<E> on Iterable<E> {
+  E? get firstOrNull {
+    if (isEmpty) {
+      return null;
+    }
+
+    return first;
   }
 }
