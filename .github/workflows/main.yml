@@ -27,32 +27,36 @@ jobs:
         working-directory: backend
         run: python manage.py check
 
-      - name: Show migration state
-        working-directory: backend
-        run: python manage.py showmigrations core
-
       - name: Generate migrations
         working-directory: backend
-        run: python manage.py makemigrations core --verbosity 3
+        run: python manage.py makemigrations core --noinput
 
-      - name: Show generated files
+      - name: Verify generated migration
         run: |
-          echo "=== backend/core/migrations ==="
+          echo "=== Migration directory ==="
           ls -la backend/core/migrations
 
           echo "=== Git status ==="
           git status --short
 
-      - name: Commit generated migrations
-        run: |
-          if git diff --quiet; then
-            echo "No migration files were generated."
-            exit 0
+          if [ ! -f backend/core/migrations/0001_initial.py ]; then
+            echo "ERROR: 0001_initial.py was not generated."
+            exit 1
           fi
 
+          echo "0001_initial.py exists."
+
+      - name: Commit and push migration
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add backend/core/migrations
-          git commit -m "chore: generate django migrations"
-          git push
+          git add backend/core/migrations/0001_initial.py
+
+          if git diff --cached --quiet; then
+            echo "Migration is already committed."
+            exit 0
+          fi
+
+          git commit -m "chore: add initial Django migration"
+          git push origin main
