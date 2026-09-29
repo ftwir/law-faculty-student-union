@@ -1,70 +1,41 @@
-```yaml
 name: Build New LSU Android APK
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "client_app/**"
-      - ".github/workflows/build-android.yml"
-
-permissions:
-  contents: read
 
 jobs:
   build-apk:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
 
-      - name: Verify Flutter
-        run: flutter --version
-
-      - name: Get Flutter dependencies
+      - name: Flutter Pub Get
         working-directory: client_app
         run: flutter pub get
 
-      - name: Analyze Flutter project
+      - name: Flutter Analyze
         working-directory: client_app
         run: flutter analyze
 
-      - name: Build release APK
+      - name: Build APK
         working-directory: client_app
         run: flutter build apk --release
-
-      - name: Verify APK
-        working-directory: client_app
-        run: |
-          echo "=== APK files ==="
-          find build/app/outputs/flutter-apk -type f -name "*.apk" -print
-
-          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ]; then
-            echo "ERROR: APK was not generated."
-            exit 1
-          fi
-
-          echo "APK generated successfully."
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: new-lsu-android-apk
           path: client_app/build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 14
-```
