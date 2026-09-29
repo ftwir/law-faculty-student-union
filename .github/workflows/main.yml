@@ -10,10 +10,6 @@ jobs:
   makemigrations:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: backend
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,16 +20,33 @@ jobs:
           python-version: "3.12"
 
       - name: Install backend dependencies
+        working-directory: backend
         run: pip install -r requirements.txt
 
+      - name: Check Django
+        working-directory: backend
+        run: python manage.py check
+
+      - name: Show migration state
+        working-directory: backend
+        run: python manage.py showmigrations core
+
       - name: Generate migrations
-        run: python manage.py makemigrations core --noinput
+        working-directory: backend
+        run: python manage.py makemigrations core --verbosity 3
+
+      - name: Show generated files
+        run: |
+          echo "=== backend/core/migrations ==="
+          ls -la backend/core/migrations
+
+          echo "=== Git status ==="
+          git status --short
 
       - name: Commit generated migrations
-        working-directory: .
         run: |
           if git diff --quiet; then
-            echo "No migration changes detected."
+            echo "No migration files were generated."
             exit 0
           fi
 
