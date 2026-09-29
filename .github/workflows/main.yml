@@ -30,6 +30,7 @@ jobs:
         run: python manage.py makemigrations core --noinput
 
       - name: Commit generated migrations
+        working-directory: .
         run: |
           if git diff --quiet; then
             echo "No migration changes detected."
