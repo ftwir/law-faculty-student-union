@@ -247,10 +247,9 @@ class _LoginScreenState
 
                       decoration:
                           BoxDecoration(
-                        color: Colors.red
-                            .withOpacity(
-                          0.10,
-                        ),
+                        color: Colors.red.withValues(
+  alpha: 0.10,
+),
 
                         borderRadius:
                             BorderRadius.circular(
