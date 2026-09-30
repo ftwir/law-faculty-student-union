@@ -32,20 +32,35 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    setState(() { loading = true; loadError = null; });
-    try {
-      final results = await Future.wait<dynamic>([api.getHubs(), api.getChatRooms(), api.me()]);
-      if (!mounted) return;
-      setState(() {
-        hubs = results[0] as List<dynamic>;
-        rooms = results[1] as List<dynamic>;
-        profile = results[2] as Map<String, dynamic>;
-        loading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() { loading = false; loadError = error.toString().replaceFirst('ApiException: ', ''); });
-    }
+    setState(() {
+      loading = true;
+      loadError = null;
+    });
+
+    // Chat is optional: a temporary chat failure must never block the feed.
+    final results = await Future.wait<dynamic>([
+      api.getHubs().catchError((_) => <dynamic>[]),
+      api.getChatRooms().catchError((_) => <dynamic>[]),
+      api.me().catchError((error) => error),
+    ]);
+
+    if (!mounted) return;
+
+    final meResult = results[2];
+    final profileLoaded = meResult is Map<String, dynamic>;
+
+    setState(() {
+      hubs = results[0] as List<dynamic>;
+      rooms = results[1] as List<dynamic>;
+      if (profileLoaded) {
+        profile = meResult;
+      }
+      loading = false;
+      // Authentication/profile failure is the only fatal condition.
+      loadError = profileLoaded
+          ? null
+          : meResult.toString().replaceFirst('ApiException: ', '');
+    });
   }
 
   Hub? get hub {
