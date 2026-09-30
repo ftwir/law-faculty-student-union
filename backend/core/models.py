@@ -53,8 +53,15 @@ class Hub(models.Model):
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     cover_image_url = models.URLField(blank=True)
-    is_public = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=False)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    hub_admin = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_hubs",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -67,10 +74,21 @@ class HubMembershipRole(models.TextChoices):
     MEMBER = "member", "Hub Member"
 
 
+class HubMembershipStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
 class HubMembership(models.Model):
     hub = models.ForeignKey(Hub, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="hub_memberships")
     role = models.CharField(max_length=16, choices=HubMembershipRole.choices, default=HubMembershipRole.MEMBER)
+    status = models.CharField(
+        max_length=16,
+        choices=HubMembershipStatus.choices,
+        default=HubMembershipStatus.PENDING,
+    )
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
