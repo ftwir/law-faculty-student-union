@@ -445,6 +445,17 @@ class WikiPageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return queryset.none()
+
+        if profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).values_list("hub_id", flat=True)
+            queryset = queryset.filter(hub_id__in=approved)
+
         hub_id = self.request.query_params.get("hub")
         if hub_id:
             queryset = queryset.filter(hub_id=hub_id)
