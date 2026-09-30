@@ -31,22 +31,48 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          # ---------------------------------------------------------
+          # Android networking permission
+          # ---------------------------------------------------------
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
 
-          permission = '<uses-permission android:name="android.permission.INTERNET"/>'
+          permission = (
+              '<uses-permission '
+              'android:name="android.permission.INTERNET"/>'
+          )
 
           if permission not in text:
               text = text.replace(
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission,
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
+                  f'    {permission}',
               )
 
           manifest.write_text(text)
+
+          # ---------------------------------------------------------
+          # Stable unique application ID
+          #
+          # This prevents Android from treating the new LSU APK as
+          # an incompatible update of an older package.
+          # ---------------------------------------------------------
+          gradle = Path("android/app/build.gradle")
+          text = gradle.read_text()
+
+          text = text.replace(
+              'applicationId "com.example.law_union_client"',
+              'applicationId "ly.edu.sirt.lawunion"',
+          )
+
+          gradle.write_text(text)
           PY
 
           echo "Android INTERNET permission:"
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml || true
+
+          echo "Android application ID:"
+          grep -n "applicationId" android/app/build.gradle || true
 
       - name: Flutter Pub Get
         working-directory: client_app
@@ -58,13 +84,34 @@ jobs:
 
       - name: Build APK
         working-directory: client_app
-        run: flutter build apk --release
+        run: |
+          flutter build apk \
+            --release \
+            --build-name=1.0.0 \
+            --build-number=${GITHUB_RUN_NUMBER}
 
       - name: Verify APK
         working-directory: client_app
         run: |
-          test -f build/app/outputs/flutter-apk/app-release.apk
-          ls -lh build/app/outputs/flutter-apk/app-release.apk
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+
+          test -f "$APK"
+
+          echo "APK information:"
+          ls -lh "$APK"
+
+          echo "APK archive test:"
+          unzip -t "$APK" >/dev/null
+
+          echo "APK package information:"
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt" \
+            dump badging "$APK" | head -20
+
+          echo "APK signature verification:"
+          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
+            verify \
+            --verbose \
+            "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
