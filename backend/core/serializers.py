@@ -65,21 +65,53 @@ class RegisterSerializer(serializers.Serializer):
 
 class HubSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
+    membership_status = serializers.SerializerMethodField()
+    is_hub_admin = serializers.SerializerMethodField()
+    hub_admin_name = serializers.CharField(source="hub_admin.display_name", read_only=True)
 
     class Meta:
         model = models.Hub
-        fields = ["id", "name", "slug", "description", "cover_image_url", "is_public", "created_by", "created_at", "member_count"]
-        read_only_fields = ["id", "created_by", "created_at", "member_count"]
+        fields = [
+            "id", "name", "slug", "description", "cover_image_url",
+            "is_public", "created_by", "hub_admin", "hub_admin_name",
+            "created_at", "member_count", "membership_status", "is_hub_admin",
+        ]
+        read_only_fields = [
+            "id", "created_by", "created_at", "member_count",
+            "membership_status", "is_hub_admin", "hub_admin_name",
+        ]
 
     def get_member_count(self, obj):
-        return obj.memberships.count()
+        return obj.memberships.filter(
+            status=models.HubMembershipStatus.APPROVED
+        ).count()
+
+    def get_membership_status(self, obj):
+        request = self.context.get("request")
+        profile = getattr(getattr(request, "user", None), "profile", None)
+        if profile is None:
+            return None
+        membership = obj.memberships.filter(user=profile).first()
+        return membership.status if membership else None
+
+    def get_is_hub_admin(self, obj):
+        request = self.context.get("request")
+        profile = getattr(getattr(request, "user", None), "profile", None)
+        return bool(
+            profile and (
+                profile.role == models.Role.AGENT
+                or obj.hub_admin_id == profile.id
+            )
+        )
 
 
 class HubMembershipSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.display_name", read_only=True)
+
     class Meta:
         model = models.HubMembership
-        fields = ["id", "hub", "user", "role", "joined_at"]
-        read_only_fields = ["id", "joined_at"]
+        fields = ["id", "hub", "user", "user_name", "role", "status", "joined_at"]
+        read_only_fields = ["id", "user_name", "joined_at"]
 
 
 class CommentSerializer(serializers.ModelSerializer):
