@@ -576,6 +576,69 @@ class ApiClient {
     return Map<String, dynamic>.from(data as Map);
   }
 
+  Future<List<dynamic>> getFlashcards(int hubId) async {
+    final response = await http.get(
+      _uri('/api/flashcards/?hub=$hubId'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحميل البطاقات التعليمية.'), statusCode: response.statusCode);
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) return data['results'];
+    return [];
+  }
+
+  Future<Map<String, dynamic>> createFlashcard({
+    required int hubId,
+    required String frontText,
+    required String backText,
+  }) async {
+    final response = await http.post(
+      _uri('/api/flashcards/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'hub': hubId,
+        'front_text': frontText,
+        'back_text': backText,
+      }),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_errorMessage(data, 'تعذر إنشاء البطاقة التعليمية.'), statusCode: response.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<dynamic>> getPolls(int hubId) async {
+    final response = await http.get(
+      _uri('/api/polls/?hub=$hubId'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحميل الاستطلاعات.'), statusCode: response.statusCode);
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) return data['results'];
+    return [];
+  }
+
+  Future<List<dynamic>> getQuizzes(int hubId) async {
+    final response = await http.get(
+      _uri('/api/quizzes/?hub=$hubId'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحميل الاختبارات.'), statusCode: response.statusCode);
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) return data['results'];
+    return [];
+  }
+
   Future<List<dynamic>> getBadges() async {
     final response = await http.get(
       _uri('/api/user-badges/'),
