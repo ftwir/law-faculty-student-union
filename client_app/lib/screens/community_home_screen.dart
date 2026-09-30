@@ -6,6 +6,7 @@ import '../theme.dart';
 import 'chat_screen.dart';
 import 'hub_detail_screen.dart';
 import 'hub_list_screen.dart';
+import 'notifications_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'wiki_screen.dart';
@@ -170,6 +171,10 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
           }),
           ListTile(leading: const Icon(Icons.chat), title: const Text('المحادثات'), onTap: () {
             Navigator.pop(context); setState(() => index = 2);
+          }),
+          ListTile(leading: const Icon(Icons.notifications_none), title: const Text('الإشعارات'), onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
           }),
           ListTile(leading: const Icon(Icons.emoji_events), title: Text(t('النقاط والشارات', 'Gamification')), onTap: () {
             Navigator.pop(context);
