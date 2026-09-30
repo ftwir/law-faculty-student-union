@@ -6,6 +6,7 @@ class Hub {
   final int memberCount;
   final String? membershipStatus;
   final bool isHubAdmin;
+  final String slug;
 
   Hub({
     required this.id,
@@ -15,6 +16,7 @@ class Hub {
     required this.memberCount,
     required this.membershipStatus,
     required this.isHubAdmin,
+    required this.slug,
   });
 
   factory Hub.fromJson(Map<String, dynamic> json) => Hub(
@@ -25,5 +27,6 @@ class Hub {
         memberCount: json['member_count'] ?? 0,
         membershipStatus: json['membership_status']?.toString(),
         isHubAdmin: json['is_hub_admin'] == true,
+        slug: json['slug']?.toString() ?? '',
       );
 }
