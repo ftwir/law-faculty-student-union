@@ -271,11 +271,27 @@ class CommentViewSet(viewsets.ModelViewSet):
 class PollViewSet(viewsets.ModelViewSet):
     queryset = (
         models.Poll.objects
-        .select_related("post")
+        .select_related("post", "post__hub")
         .prefetch_related("options__votes")
     )
     serializer_class = serializers.PollSerializer
     permission_classes = [ReadOnlyForVisitors]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return queryset.none()
+        if profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).values_list("hub_id", flat=True)
+            queryset = queryset.filter(post__hub_id__in=approved)
+        hub_id = self.request.query_params.get("hub")
+        if hub_id:
+            queryset = queryset.filter(post__hub_id=hub_id)
+        return queryset
 
 
 class PollVoteView(APIView):
@@ -338,22 +354,59 @@ class PollVoteView(APIView):
 class QuizViewSet(viewsets.ModelViewSet):
     queryset = (
         models.Quiz.objects
+        .select_related("post", "post__hub")
         .prefetch_related("questions")
         .all()
     )
     serializer_class = serializers.QuizSerializer
     permission_classes = [ReadOnlyForVisitors]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return queryset.none()
+        if profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).values_list("hub_id", flat=True)
+            queryset = queryset.filter(post__hub_id__in=approved)
+        hub_id = self.request.query_params.get("hub")
+        if hub_id:
+            queryset = queryset.filter(post__hub_id=hub_id)
+        return queryset
+
 
 class FlashcardViewSet(viewsets.ModelViewSet):
-    queryset = models.Flashcard.objects.all()
+    queryset = models.Flashcard.objects.select_related("hub", "created_by").order_by("-id")
     serializer_class = serializers.FlashcardSerializer
     permission_classes = [ReadOnlyForVisitors]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return queryset.none()
+        if profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).values_list("hub_id", flat=True)
+            queryset = queryset.filter(hub_id__in=approved)
+        hub_id = self.request.query_params.get("hub")
+        if hub_id:
+            queryset = queryset.filter(hub_id=hub_id)
+        return queryset
+
     def perform_create(self, serializer):
-        serializer.save(
-            created_by=self.request.user.profile
-        )
+        profile = self.request.user.profile
+        hub = serializer.validated_data["hub"]
+        if profile.role != models.Role.AGENT and not models.HubMembership.objects.filter(
+            hub=hub, user=profile, status=models.HubMembershipStatus.APPROVED
+        ).exists():
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
+        serializer.save(created_by=profile)
 
 
 class ChatRoomViewSet(viewsets.ModelViewSet):
