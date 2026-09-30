@@ -211,7 +211,10 @@ class ChatParticipant(models.Model):
 class Message(models.Model):
     room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
-    body = models.TextField()
+    body = models.TextField(blank=True)
+    attachment = models.FileField(upload_to="chat_attachments/%Y/%m/", blank=True, null=True)
+    attachment_name = models.CharField(max_length=255, blank=True)
+    attachment_type = models.CharField(max_length=100, blank=True)
     sent_at = models.DateTimeField(auto_now_add=True)
     read_by = models.ManyToManyField(User, related_name="read_messages", blank=True)
 
