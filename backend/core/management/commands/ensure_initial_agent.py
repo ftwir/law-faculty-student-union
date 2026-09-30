@@ -3,7 +3,7 @@ import os
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from core.models import User
+from core.models import Role, User
 
 
 class Command(BaseCommand):
@@ -44,11 +44,11 @@ class Command(BaseCommand):
             defaults={
                 "student_id": student_id or None,
                 "display_name": display_name,
-                "role": "AGENT",
+                "role": Role.AGENT,
             },
         )
 
-        profile.role = "AGENT"
+        profile.role = Role.AGENT
         profile.display_name = display_name
 
         if student_id:
