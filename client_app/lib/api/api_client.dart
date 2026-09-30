@@ -551,6 +551,55 @@ class ApiClient {
     return [];
   }
 
+  Future<Map<String, dynamic>> createComment({
+    required int postId,
+    required String body,
+  }) async {
+    final response = await http.post(
+      _uri('/api/comments/'),
+      headers: await _headers(),
+      body: jsonEncode({'post': postId, 'body': body}),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_errorMessage(data, 'تعذر إضافة التعليق.'), statusCode: response.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> createPoll({
+    required int hubId,
+    required String body,
+    required String question,
+    required List<String> options,
+    DateTime? closesAt,
+  }) async {
+    final postResponse = await http.post(
+      _uri('/api/posts/'),
+      headers: await _headers(),
+      body: jsonEncode({'hub': hubId, 'body': body, 'post_type': 'poll'}),
+    );
+    final postData = _decode(postResponse);
+    if (postResponse.statusCode != 201) {
+      throw ApiException(_errorMessage(postData, 'تعذر إنشاء المنشور.'), statusCode: postResponse.statusCode);
+    }
+    final postId = postData['id'];
+    final response = await http.post(
+      _uri('/api/polls/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'post': postId,
+        'question': question,
+        if (closesAt != null) 'closes_at': closesAt.toUtc().toIso8601String(),
+      }),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_errorMessage(data, 'تعذر إنشاء الاستطلاع.'), statusCode: response.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   Future<Map<String, dynamic>> createWiki({
     required int hubId,
     required String title,
