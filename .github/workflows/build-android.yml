@@ -57,22 +57,49 @@ jobs:
           # This prevents Android from treating the new LSU APK as
           # an incompatible update of an older package.
           # ---------------------------------------------------------
-          gradle = Path("android/app/build.gradle")
-          text = gradle.read_text()
+          # Flutter 3.47+ generates Kotlin DSL (build.gradle.kts).
+          # Support the generated format directly; keep legacy Groovy only
+          # for compatibility with older Flutter toolchains.
+          kts = Path("android/app/build.gradle.kts")
+          groovy = Path("android/app/build.gradle")
 
-          text = text.replace(
-              'applicationId "com.example.law_union_client"',
-              'applicationId "ly.edu.sirt.lawunion"',
-          )
+          if kts.exists():
+              text = kts.read_text()
+              old = 'applicationId = "com.example.law_union_client"'
+              new = 'applicationId = "ly.edu.sirt.lawunion"'
 
-          gradle.write_text(text)
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif 'applicationId = "' not in text:
+                  raise SystemExit("Could not locate applicationId in build.gradle.kts.")
+
+              kts.write_text(text)
+
+          elif groovy.exists():
+              text = groovy.read_text()
+              old = 'applicationId "com.example.law_union_client"'
+              new = 'applicationId "ly.edu.sirt.lawunion"'
+
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif "applicationId " not in text:
+                  raise SystemExit("Could not locate applicationId in build.gradle.")
+
+              groovy.write_text(text)
+
+          else:
+              raise SystemExit("No Android app Gradle file was generated.")
           PY
 
           echo "Android INTERNET permission:"
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml || true
 
           echo "Android application ID:"
-          grep -n "applicationId" android/app/build.gradle || true
+          if [ -f android/app/build.gradle.kts ]; then
+            grep -n "applicationId" android/app/build.gradle.kts
+          else
+            grep -n "applicationId" android/app/build.gradle
+          fi
 
       - name: Flutter Pub Get
         working-directory: client_app
