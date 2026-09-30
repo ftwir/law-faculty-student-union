@@ -1,4 +1,6 @@
 from django.contrib.auth import authenticate
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -663,13 +665,27 @@ class MessageViewSet(viewsets.ModelViewSet):
         if not body and not attachment:
             raise serializers.ValidationError("يجب إرسال نص أو ملف.")
         if attachment:
-            serializer.save(
+            message = serializer.save(
                 sender=profile,
                 attachment_name=getattr(attachment, "name", ""),
                 attachment_type=getattr(attachment, "content_type", "") or "",
             )
         else:
-            serializer.save(sender=profile)
+            message = serializer.save(sender=profile)
+
+        payload = serializers.MessageSerializer(
+            message,
+            context={"request": self.request},
+        ).data
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{room.id}",
+                {
+                    "type": "chat.message",
+                    "payload": payload,
+                },
+            )
 
 
 class BadgeViewSet(viewsets.ModelViewSet):
