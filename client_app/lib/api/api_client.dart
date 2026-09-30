@@ -296,6 +296,21 @@ class ApiClient {
   }
 
 
+  Future<String> requestHubMembership(int hubId) async {
+    final response = await http.post(
+      _uri('/api/hubs/$hubId/request_membership/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(data, 'تعذر إرسال طلب الانضمام.'),
+        statusCode: response.statusCode,
+      );
+    }
+    return (data is Map ? data['status'] : null)?.toString() ?? 'pending';
+  }
+
   Future<List<dynamic>> getPosts(
     int hubId,
   ) async {
