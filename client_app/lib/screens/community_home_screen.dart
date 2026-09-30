@@ -22,6 +22,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
   List<dynamic> hubs = [];
   List<dynamic> rooms = [];
   Map<String, dynamic>? profile;
+  Hub? selectedHub;
   bool loading = true;
   String? loadError;
 
@@ -52,6 +53,14 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
     setState(() {
       hubs = results[0] as List<dynamic>;
       rooms = results[1] as List<dynamic>;
+      if (selectedHub != null) {
+        final refreshed = hubs
+            .map((item) => Hub.fromJson(Map<String, dynamic>.from(item as Map)))
+            .where((item) => item.id == selectedHub!.id)
+            .cast<Hub>()
+            .toList();
+        if (refreshed.isNotEmpty) selectedHub = refreshed.first;
+      }
       if (profileLoaded) {
         profile = meResult;
       }
@@ -63,9 +72,10 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
     });
   }
 
-  Hub? get hub {
-    if (hubs.isEmpty) return null;
-    return Hub.fromJson(Map<String, dynamic>.from(hubs.first as Map));
+  Hub? get hub => selectedHub;
+
+  void _selectHub(Hub value) {
+    setState(() => selectedHub = value);
   }
 
   @override
@@ -101,7 +111,9 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
     final current = hub;
     return Scaffold(
       appBar: AppBar(
-        title: Text(index == 0 ? 'السنوات والأقسام' : index == 1 ? 'الويكي' : 'الدردشة'),
+        title: Text(index == 0
+            ? (current == null ? 'السنوات والأقسام' : current.name)
+            : index == 1 ? 'ويكي ${current?.name ?? ''}' : 'دردشة ${current?.name ?? ''}'),
         actions: [
           IconButton(
             tooltip: t('الملف الشخصي', 'Profile'),
@@ -112,7 +124,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
       ),
       drawer: _buildDrawer(current),
       body: IndexedStack(index: index, children: [
-        const HubListScreen(),
+        HubListScreen(onHubSelected: _selectHub),
         current == null ? const Center(child: Text('اختر قسماً أولاً')) : WikiScreen(hubId: current.id),
         _chatList(),
       ]),
@@ -152,11 +164,11 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
           ListTile(leading: const Icon(Icons.groups), title: const Text('السنوات والأقسام'), onTap: () {
             Navigator.pop(context); setState(() => index = 0);
           }),
-          ListTile(leading: const Icon(Icons.menu_book), title: Text(t('الويكي', 'Wiki')), onTap: () {
+          ListTile(leading: const Icon(Icons.menu_book), title: Text('الويكي'), onTap: () {
             Navigator.pop(context);
             if (current != null) Navigator.push(context, MaterialPageRoute(builder: (_) => WikiScreen(hubId: current.id)));
           }),
-          ListTile(leading: const Icon(Icons.chat), title: Text(t('المحادثات', 'Chats')), onTap: () {
+          ListTile(leading: const Icon(Icons.chat), title: const Text('المحادثات'), onTap: () {
             Navigator.pop(context); setState(() => index = 2);
           }),
           ListTile(leading: const Icon(Icons.emoji_events), title: Text(t('النقاط والشارات', 'Gamification')), onTap: () {
@@ -179,7 +191,19 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
   }
 
   Widget _chatList() {
-    if (rooms.isEmpty) {
+    final visibleRooms = hub == null
+        ? <dynamic>[]
+        : rooms.where((item) {
+            final room = Map<String, dynamic>.from(item as Map);
+            final roomHub = room['hub'];
+            if (roomHub is Map) return roomHub['id'].toString() == hub!.id.toString();
+            return roomHub?.toString() == hub!.id.toString();
+          }).toList();
+
+    if (hub == null) {
+      return const Center(child: Text('اختر سنة أو قسماً أولاً'));
+    }
+    if (visibleRooms.isEmpty) {
       return Center(child: FilledButton.icon(onPressed: _createRoom, icon: const Icon(Icons.add_comment), label: Text(t('إنشاء غرفة دردشة', 'Create chat room'))));
     }
     return RefreshIndicator(
@@ -187,10 +211,10 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
       child: ListView.separated(
         padding: const EdgeInsets.all(12),
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: rooms.length,
+        itemCount: visibleRooms.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (_, i) {
-          final room = Map<String, dynamic>.from(rooms[i] as Map);
+          final room = Map<String, dynamic>.from(visibleRooms[i] as Map);
           return Card(child: ListTile(
             leading: const CircleAvatar(child: Icon(Icons.chat)),
             title: Text(room['name']?.toString() ?? t('محادثة', 'Chat')),
