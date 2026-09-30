@@ -818,6 +818,32 @@ class ApiClient {
     return [];
   }
 
+  Future<List<dynamic>> getNotifications() async {
+    final response = await http.get(
+      _uri('/api/notifications/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(data, 'تعذر تحميل الإشعارات.'),
+        statusCode: response.statusCode,
+      );
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) {
+      return data['results'];
+    }
+    return [];
+  }
+
+  Future<int> getUnreadNotificationCount() async {
+    final notifications = await getNotifications();
+    return notifications.where((item) {
+      return item is Map && item['is_read'] != true;
+    }).length;
+  }
+
   Future<String?> authToken() async {
     return _token;
   }
