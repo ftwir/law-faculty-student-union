@@ -54,6 +54,35 @@ router.register(
 )
 
 router.register(
+    "wiki",
+    views.WikiPageViewSet,
+)
+
+router.register(
+    "reports",
+    views.ContentReportViewSet,
+    basename="report",
+)
+
+router.register(
+    "user-badges",
+    views.UserBadgeViewSet,
+    basename="user-badge",
+)
+
+router.register(
+    "admin-users",
+    views.AdminUserViewSet,
+    basename="admin-user",
+)
+
+router.register(
+    "permission-grants",
+    views.PermissionGrantViewSet,
+    basename="permission-grant",
+)
+
+router.register(
     "notifications",
     views.NotificationViewSet,
     basename="notification",
