@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from rest_framework import viewsets, generics, status, permissions
@@ -378,7 +379,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
                 status=models.HubMembershipStatus.APPROVED,
             ).values_list("hub_id", flat=True)
             rooms = rooms.filter(
-                models.Q(hub__isnull=True) | models.Q(hub_id__in=approved)
+                Q(hub__isnull=True) | Q(hub_id__in=approved)
             )
         return rooms
 
