@@ -625,6 +625,17 @@ class ApiClient {
     return [];
   }
 
+  Future<void> votePoll(int optionId) async {
+    final response = await http.post(
+      _uri('/api/polls/options/$optionId/vote/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_errorMessage(data, 'تعذر تسجيل التصويت.'), statusCode: response.statusCode);
+    }
+  }
+
   Future<List<dynamic>> getQuizzes(int hubId) async {
     final response = await http.get(
       _uri('/api/quizzes/?hub=$hubId'),
