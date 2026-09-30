@@ -296,6 +296,43 @@ class ApiClient {
   }
 
 
+  Future<List<dynamic>> getHubMembershipRequests(int hubId) async {
+    final response = await http.get(
+      _uri('/api/hubs/$hubId/membership_requests/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحميل طلبات الانضمام.'), statusCode: response.statusCode);
+    }
+    if (data is List) return data;
+    return [];
+  }
+
+  Future<void> approveHubMember(int hubId, int userId) async {
+    final response = await http.post(
+      _uri('/api/hubs/$hubId/approve_member/'),
+      headers: await _headers(),
+      body: jsonEncode({'user_id': userId}),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر قبول العضو.'), statusCode: response.statusCode);
+    }
+  }
+
+  Future<void> rejectHubMember(int hubId, int userId) async {
+    final response = await http.post(
+      _uri('/api/hubs/$hubId/reject_member/'),
+      headers: await _headers(),
+      body: jsonEncode({'user_id': userId}),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر رفض الطلب.'), statusCode: response.statusCode);
+    }
+  }
+
   Future<String> requestHubMembership(int hubId) async {
     final response = await http.post(
       _uri('/api/hubs/$hubId/request_membership/'),
