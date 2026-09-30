@@ -4,6 +4,7 @@ import '../api/api_client.dart';
 import '../models/hub.dart';
 import '../theme.dart';
 import 'hub_detail_screen.dart';
+import 'hub_membership_admin_screen.dart';
 
 class HubListScreen extends StatefulWidget {
   const HubListScreen({super.key});
@@ -147,14 +148,26 @@ class _HubListScreenState extends State<HubListScreen> {
                       ),
                     ),
                     isThreeLine: true,
-                    trailing: Icon(
-                      approved
-                          ? Icons.arrow_forward_ios
-                          : hub.membershipStatus == 'pending'
-                              ? Icons.hourglass_top
-                              : Icons.lock_outline,
-                      size: 18,
-                    ),
+                    trailing: hub.isHubAdmin
+                        ? IconButton(
+                            tooltip: 'إدارة طلبات الانضمام',
+                            icon: const Icon(Icons.admin_panel_settings_outlined),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => HubMembershipAdminScreen(hub: hub),
+                                ),
+                              );
+                            },
+                          )
+                        : Icon(
+                            approved
+                                ? Icons.arrow_forward_ios
+                                : hub.membershipStatus == 'pending'
+                                    ? Icons.hourglass_top
+                                    : Icons.lock_outline,
+                            size: 18,
+                          ),
                     onTap: () => _openHub(hub),
                   ),
                 );
