@@ -6,6 +6,7 @@ import '../theme.dart';
 import 'chat_screen.dart';
 import 'hub_membership_admin_screen.dart';
 import 'wiki_screen.dart';
+import 'quiz_screen.dart';
 
 class HubDetailScreen extends StatefulWidget {
   final Hub hub;
@@ -186,12 +187,134 @@ class _HubDetailScreenState extends State<HubDetailScreen>
     body.dispose(); question.dispose();
     if (ok != true || b.isEmpty || q.isEmpty || values.length < 2) return;
     try {
-      // The backend currently creates the poll shell; option creation will be wired
-      // through the poll management endpoint in the next backend pass.
       await _api.createPoll(hubId: _hub.id, body: b, question: q, options: values);
       await _load();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _createQuiz() async {
+    final title = TextEditingController();
+    final body = TextEditingController();
+    final prompts = <TextEditingController>[TextEditingController()];
+    final options = <List<TextEditingController>>[
+      [TextEditingController(), TextEditingController()]
+    ];
+    final correct = <int>[0];
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('اختبار جديد'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(controller: title, decoration: const InputDecoration(labelText: 'عنوان الاختبار')),
+                  TextField(controller: body, decoration: const InputDecoration(labelText: 'وصف الاختبار')),
+                  const SizedBox(height: 12),
+                  ...prompts.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          children: [
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text('السؤال ' + (i + 1).toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                            TextField(controller: entry.value, decoration: const InputDecoration(labelText: 'نص السؤال')),
+                            const SizedBox(height: 6),
+                            ...options[i].asMap().entries.map((optionEntry) => Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: optionEntry.value,
+                                    decoration: InputDecoration(labelText: 'الخيار ' + (optionEntry.key + 1).toString()),
+                                  ),
+                                ),
+                                Radio<int>(
+                                  value: optionEntry.key,
+                                  groupValue: correct[i],
+                                  onChanged: (value) {
+                                    if (value != null) setDialog(() => correct[i] = value);
+                                  },
+                                ),
+                              ],
+                            )),
+                            if (options[i].length < 6)
+                              TextButton.icon(
+                                onPressed: () => setDialog(() => options[i].add(TextEditingController())),
+                                icon: const Icon(Icons.add),
+                                label: const Text('إضافة خيار'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () {
+                      if (prompts.length >= 30) return;
+                      setDialog(() {
+                        prompts.add(TextEditingController());
+                        options.add([TextEditingController(), TextEditingController()]);
+                        correct.add(0);
+                      });
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة سؤال'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إنشاء')),
+          ],
+        ),
+      ),
+    );
+
+    final titleText = title.text.trim();
+    final bodyText = body.text.trim();
+    final questionData = <Map<String, dynamic>>[];
+    for (var i = 0; i < prompts.length; i++) {
+      final prompt = prompts[i].text.trim();
+      final values = options[i].map((controller) => controller.text.trim()).where((value) => value.isNotEmpty).toList();
+      if (prompt.isEmpty || values.length < 2 || correct[i] >= values.length) continue;
+      questionData.add({
+        'prompt': prompt,
+        'options': values,
+        'correct_option_index': correct[i],
+      });
+    }
+
+    title.dispose();
+    body.dispose();
+    for (final controller in prompts) controller.dispose();
+    for (final row in options) {
+      for (final controller in row) controller.dispose();
+    }
+
+    if (saved != true || titleText.isEmpty || questionData.isEmpty) return;
+
+    try {
+      await _api.createQuiz(
+        hubId: _hub.id,
+        title: titleText,
+        body: bodyText,
+        questions: questionData,
+      );
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -511,9 +634,20 @@ class _HubDetailScreenState extends State<HubDetailScreen>
             if (quiz is Map)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: Chip(
-                  avatar: const Icon(Icons.quiz, size: 18),
-                  label: Text('اختبار: ' + (quiz['title'] ?? '').toString()),
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => QuizScreen(quiz: Map<String, dynamic>.from(quiz))),
+                  ).then((_) => _load()),
+                  child: Card(
+                    margin: const EdgeInsets.only(top: 10),
+                    child: ListTile(
+                      leading: const Icon(Icons.quiz),
+                      title: Text((quiz['title'] ?? 'اختبار').toString()),
+                      subtitle: Text(((quiz['questions'] as List?)?.length ?? 0).toString() + ' سؤال — اضغط للبدء'),
+                      trailing: const Icon(Icons.chevron_left),
+                    ),
+                  ),
                 ),
               ),
             if ((post['comments'] as List?)?.isNotEmpty == true)
@@ -637,9 +771,9 @@ class _HubDetailScreenState extends State<HubDetailScreen>
           const SizedBox(height: 16),
           _sectionTitle(
             'الاختبارات',
-            'اختبارات مرتبطة بمحتوى هذا القسم.',
+            'أنشئ اختبارات وتحدَّ نفسك في مواد القسم.',
             Icons.quiz,
-            null,
+            _createQuiz,
           ),
           if (_quizzes.isEmpty)
             const _EmptyBox(
