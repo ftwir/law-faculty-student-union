@@ -700,6 +700,78 @@ class ApiClient {
     return [];
   }
 
+  Future<Map<String, dynamic>> updateWiki({
+    required int pageId,
+    required String title,
+    required String content,
+    String? summary,
+  }) async {
+    final response = await http.patch(
+      _uri('/api/wiki/$pageId/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'title': title,
+        'content': content,
+        if (summary != null) 'summary': summary,
+      }),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحديث صفحة الويكي.'), statusCode: response.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> deleteWiki(int pageId) async {
+    final response = await http.delete(
+      _uri('/api/wiki/$pageId/'),
+      headers: await _headers(json: false),
+    );
+    if (response.statusCode != 204) {
+      final data = _decode(response);
+      throw ApiException(_errorMessage(data, 'تعذر حذف صفحة الويكي.'), statusCode: response.statusCode);
+    }
+  }
+
+  Future<Map<String, dynamic>> createQuiz({
+    required int hubId,
+    required String title,
+    required String body,
+    required List<Map<String, dynamic>> questions,
+  }) async {
+    final response = await http.post(
+      _uri('/api/quizzes/create/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'hub': hubId,
+        'title': title,
+        'body': body,
+        'questions': questions,
+      }),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_errorMessage(data, 'تعذر إنشاء الاختبار.'), statusCode: response.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> attemptQuiz({
+    required int quizId,
+    required List<int> answers,
+  }) async {
+    final response = await http.post(
+      _uri('/api/quizzes/$quizId/attempt/'),
+      headers: await _headers(),
+      body: jsonEncode({'answers': answers}),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_errorMessage(data, 'تعذر إرسال إجابات الاختبار.'), statusCode: response.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   Future<List<dynamic>> getBadges() async {
     final response = await http.get(
       _uri('/api/user-badges/'),
