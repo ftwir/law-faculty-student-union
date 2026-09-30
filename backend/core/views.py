@@ -114,6 +114,25 @@ class MeView(APIView):
             serializers.UserProfileSerializer(profile).data
         )
 
+    def patch(self, request):
+        profile = getattr(request.user, "profile", None)
+
+        if not profile:
+            return Response(
+                {"detail": "لا يوجد ملف شخصي لهذا الحساب."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = serializers.UserProfileSerializer(
+            profile,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data)
+
 
 class HubViewSet(viewsets.ModelViewSet):
     queryset = models.Hub.objects.all().order_by("-created_at")
