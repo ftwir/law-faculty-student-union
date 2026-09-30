@@ -7,7 +7,9 @@ import 'hub_detail_screen.dart';
 import 'hub_membership_admin_screen.dart';
 
 class HubListScreen extends StatefulWidget {
-  const HubListScreen({super.key});
+  final ValueChanged<Hub>? onHubSelected;
+
+  const HubListScreen({super.key, this.onHubSelected});
   @override
   State<HubListScreen> createState() => _HubListScreenState();
 }
@@ -48,6 +50,7 @@ class _HubListScreenState extends State<HubListScreen> {
   Future<void> _openHub(Hub hub) async {
     if (hub.membershipStatus == 'approved' || hub.isHubAdmin) {
       if (!mounted) return;
+      widget.onHubSelected?.call(hub);
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => HubDetailScreen(hub: hub)));
       return;
     }
