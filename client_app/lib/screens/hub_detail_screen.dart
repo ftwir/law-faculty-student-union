@@ -419,16 +419,6 @@ class _HubDetailScreenState extends State<HubDetailScreen>
             )),
           ]),
           const SizedBox(height: 10),
-          /* old composer removed */ Card(
-            child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.edit)),
-              title: const Text('شارك مع القسم'),
-              subtitle: const Text('انشر سؤالاً أو معلومة أو إعلاناً دراسياً'),
-              trailing: const Icon(Icons.chevron_left),
-              onTap: _publishPost,
-            ),
-          ),
-          const SizedBox(height: 10),
           if (_posts.isEmpty)
             const _EmptyBox(
               icon: Icons.dynamic_feed_outlined,
