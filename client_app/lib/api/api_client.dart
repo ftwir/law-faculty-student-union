@@ -564,6 +564,20 @@ class ApiClient {
     return [];
   }
 
+  Future<List<dynamic>> getComments(int postId) async {
+    final response = await http.get(
+      _uri('/api/comments/?post=$postId'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحميل التعليقات.'), statusCode: response.statusCode);
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) return data['results'];
+    return [];
+  }
+
   Future<Map<String, dynamic>> createComment({
     required int postId,
     required String body,
