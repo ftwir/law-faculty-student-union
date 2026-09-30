@@ -26,7 +26,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
   String? loadError;
 
   bool get ar => Localizations.localeOf(context).languageCode == 'ar';
-  String t(String a, String e) => ar ? a : e;
+  String t(String a, String e) => a;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -101,7 +101,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
     final current = hub;
     return Scaffold(
       appBar: AppBar(
-        title: Text(index == 0 ? t('الخلاصة', 'Feed') : index == 1 ? t('الويكي', 'Wiki') : t('الدردشة', 'Chats')),
+        title: Text(index == 0 ? 'السنوات والأقسام' : index == 1 ? 'الويكي' : 'الدردشة'),
         actions: [
           IconButton(
             tooltip: t('الملف الشخصي', 'Profile'),
@@ -112,8 +112,8 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
       ),
       drawer: _buildDrawer(current),
       body: IndexedStack(index: index, children: [
-        current == null ? const HubListScreen() : HubDetailScreen(hub: current),
-        current == null ? Center(child: Text(t('لا يوجد مجتمع', 'No community'))) : WikiScreen(hubId: current.id),
+        const HubListScreen(),
+        current == null ? const Center(child: Text('اختر قسماً أولاً')) : WikiScreen(hubId: current.id),
         _chatList(),
       ]),
       bottomNavigationBar: NavigationBar(
@@ -125,9 +125,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
           NavigationDestination(icon: const Icon(Icons.chat_bubble_outline), selectedIcon: const Icon(Icons.chat_bubble), label: t('الدردشة', 'Chat')),
         ],
       ),
-      floatingActionButton: index == 0 && current != null
-          ? FloatingActionButton(onPressed: () => _showCreateMenu(current), child: const Icon(Icons.add))
-          : null,
+      floatingActionButton: null,
     );
   }
 
@@ -151,7 +149,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
             Navigator.pop(context);
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
           }),
-          ListTile(leading: const Icon(Icons.groups), title: Text(t('المجتمعات', 'Communities')), onTap: () {
+          ListTile(leading: const Icon(Icons.groups), title: const Text('السنوات والأقسام'), onTap: () {
             Navigator.pop(context); setState(() => index = 0);
           }),
           ListTile(leading: const Icon(Icons.menu_book), title: Text(t('الويكي', 'Wiki')), onTap: () {
