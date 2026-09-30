@@ -4,6 +4,8 @@ class Hub {
   final String description;
   final String coverImageUrl;
   final int memberCount;
+  final String? membershipStatus;
+  final bool isHubAdmin;
 
   Hub({
     required this.id,
@@ -11,6 +13,8 @@ class Hub {
     required this.description,
     required this.coverImageUrl,
     required this.memberCount,
+    required this.membershipStatus,
+    required this.isHubAdmin,
   });
 
   factory Hub.fromJson(Map<String, dynamic> json) => Hub(
@@ -19,5 +23,7 @@ class Hub {
         description: json['description'] ?? '',
         coverImageUrl: json['cover_image_url'] ?? '',
         memberCount: json['member_count'] ?? 0,
+        membershipStatus: json['membership_status']?.toString(),
+        isHubAdmin: json['is_hub_admin'] == true,
       );
 }
