@@ -335,6 +335,235 @@ class BadgeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrAgent]
 
 
+class WikiPageViewSet(viewsets.ModelViewSet):
+    queryset = (
+        models.WikiPage.objects
+        .select_related("hub", "created_by", "updated_by")
+        .order_by("-updated_at")
+    )
+    serializer_class = serializers.WikiPageSerializer
+    permission_classes = [ReadOnlyForVisitors]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        hub_id = self.request.query_params.get("hub")
+        if hub_id:
+            queryset = queryset.filter(hub_id=hub_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            raise PermissionDenied("لا يوجد ملف شخصي لهذا الحساب.")
+        serializer.save(
+            created_by=profile,
+            updated_by=profile,
+        )
+
+    def perform_update(self, serializer):
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            raise PermissionDenied("لا يوجد ملف شخصي لهذا الحساب.")
+
+        instance = self.get_object()
+        if (
+            instance.created_by_id != profile.id
+            and profile.role not in (models.Role.ADMIN, models.Role.AGENT)
+        ):
+            raise PermissionDenied(
+                "يمكن لمنشئ الصفحة أو المسؤول فقط تعديلها."
+            )
+
+        serializer.save(updated_by=profile)
+
+    def perform_destroy(self, instance):
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            raise PermissionDenied("لا يوجد ملف شخصي لهذا الحساب.")
+
+        if (
+            instance.created_by_id != profile.id
+            and profile.role not in (models.Role.ADMIN, models.Role.AGENT)
+        ):
+            raise PermissionDenied(
+                "يمكن لمنشئ الصفحة أو المسؤول فقط حذفها."
+            )
+
+        instance.delete()
+
+
+class ContentReportViewSet(viewsets.ModelViewSet):
+    serializer_class = serializers.ContentReportSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated()]
+        return [IsAdminOrAgent()]
+
+    def get_queryset(self):
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return models.ContentReport.objects.none()
+
+        return (
+            models.ContentReport.objects
+            .select_related("reporter", "resolved_by", "post", "comment")
+            .order_by("-created_at")
+        )
+
+    def perform_create(self, serializer):
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            raise PermissionDenied("لا يوجد ملف شخصي لهذا الحساب.")
+
+        post = serializer.validated_data.get("post")
+        comment = serializer.validated_data.get("comment")
+
+        if (post is None) == (comment is None):
+            raise serializers.ValidationError(
+                "يجب تحديد منشور أو تعليق واحد فقط للإبلاغ عنه."
+            )
+
+        serializer.save(reporter=profile)
+
+    def perform_update(self, serializer):
+        profile = self.request.user.profile
+        serializer.save(
+            resolved_by=profile,
+        )
+
+
+class UserBadgeViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = serializers.UserBadgeSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return models.UserBadge.objects.none()
+
+        queryset = (
+            models.UserBadge.objects
+            .select_related("user", "badge")
+            .order_by("-awarded_at")
+        )
+
+        if profile.role not in (models.Role.ADMIN, models.Role.AGENT):
+            queryset = queryset.filter(user=profile)
+
+        user_id = self.request.query_params.get("user")
+        if user_id and profile.role in (models.Role.ADMIN, models.Role.AGENT):
+            queryset = queryset.filter(user_id=user_id)
+
+        return queryset
+
+    @action(detail=False, methods=["post"], permission_classes=[IsAdminOrAgent])
+    def award(self, request):
+        user_id = request.data.get("user")
+        badge_id = request.data.get("badge")
+
+        if not user_id or not badge_id:
+            return Response(
+                {"detail": "user و badge مطلوبان."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = models.User.objects.filter(pk=user_id).first()
+        badge = models.Badge.objects.filter(pk=badge_id).first()
+
+        if user is None:
+            return Response(
+                {"detail": "المستخدم غير موجود."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if badge is None:
+            return Response(
+                {"detail": "الشارة غير موجودة."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user_badge, created = models.UserBadge.objects.get_or_create(
+            user=user,
+            badge=badge,
+        )
+
+        return Response(
+            serializers.UserBadgeSerializer(user_badge).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = serializers.UserProfileSerializer
+    permission_classes = [IsAgent]
+
+    def get_queryset(self):
+        return models.User.objects.select_related("user").order_by("display_name")
+
+    @action(detail=True, methods=["post"])
+    def promote(self, request, pk=None):
+        profile = self.get_object()
+
+        if profile.role == models.Role.AGENT:
+            return Response(
+                {"detail": "لا يمكن تعديل صلاحية Agent من هذا المسار."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile.role = models.Role.ADMIN
+        profile.save(update_fields=["role"])
+
+        return Response(serializers.UserProfileSerializer(profile).data)
+
+    @action(detail=True, methods=["post"])
+    def demote(self, request, pk=None):
+        profile = self.get_object()
+
+        if profile.role == models.Role.AGENT:
+            return Response(
+                {"detail": "لا يمكن تخفيض صلاحية Agent."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile.role = models.Role.MEMBER
+        profile.save(update_fields=["role"])
+
+        models.AdminPermissionGrant.objects.filter(user=profile).delete()
+
+        return Response(serializers.UserProfileSerializer(profile).data)
+
+
+class PermissionGrantViewSet(viewsets.ModelViewSet):
+    queryset = (
+        models.AdminPermissionGrant.objects
+        .select_related("user", "user__user")
+        .order_by("-granted_at")
+    )
+    serializer_class = serializers.AdminPermissionGrantSerializer
+    permission_classes = [IsAgent]
+
+    def perform_create(self, serializer):
+        user = serializer.validated_data["user"]
+
+        if user.role != models.Role.ADMIN:
+            raise serializers.ValidationError(
+                "يمكن منح هذه الصلاحيات للمسؤولين فقط."
+            )
+
+        serializer.save()
+
+    def perform_update(self, serializer):
+        user = serializer.instance.user
+
+        if user.role != models.Role.ADMIN:
+            raise serializers.ValidationError(
+                "يمكن تعديل صلاحيات المسؤولين فقط."
+            )
+
+        serializer.save()
+
+
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = serializers.NotificationSerializer
     permission_classes = [IsAuthenticated]
