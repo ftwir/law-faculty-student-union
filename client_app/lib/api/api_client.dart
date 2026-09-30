@@ -309,6 +309,19 @@ class ApiClient {
     return [];
   }
 
+  Future<List<dynamic>> getHubMembers(int hubId) async {
+    final response = await http.get(
+      _uri('/api/hubs/$hubId/members/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_errorMessage(data, 'تعذر تحميل أعضاء القسم.'), statusCode: response.statusCode);
+    }
+    if (data is List) return data;
+    return [];
+  }
+
   Future<void> approveHubMember(int hubId, int userId) async {
     final response = await http.post(
       _uri('/api/hubs/$hubId/approve_member/'),
