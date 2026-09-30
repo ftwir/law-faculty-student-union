@@ -49,17 +49,13 @@ class _ChatScreenState extends State<ChatScreen>{
     final path = result.files.single.path;
     if (path == null) return;
     try {
-      await api.sendAttachment(
+      final uploaded = await api.sendAttachment(
         roomId: widget.room['id'],
         filePath: path,
       );
       if (mounted) {
         setState(() {
-          messages.add({
-            'sender_name': 'أنت',
-            'body': '📎 ' + p.basename(path),
-            'attachment_name': p.basename(path),
-          });
+          messages.add(uploaded);
         });
         scrollBottom();
       }
@@ -106,18 +102,13 @@ class _ChatScreenState extends State<ChatScreen>{
       if (mounted) setState(() => recording = false);
       if (path == null) return;
       try {
-        await api.sendAttachment(
+        final uploaded = await api.sendAttachment(
           roomId: widget.room['id'],
           filePath: path,
         );
         if (mounted) {
           setState(() {
-            messages.add({
-              'sender_name': 'أنت',
-              'body': '🎤 رسالة صوتية',
-              'attachment_name': p.basename(path),
-              'attachment_type': 'audio/mp4',
-            });
+            messages.add(uploaded);
           });
           scrollBottom();
         }
