@@ -28,6 +28,38 @@ jobs:
           flutter create --platforms=android .
           rm -f test/widget_test.dart
 
+          # ---------------------------------------------------------
+          # Purple LSU launcher icon supplied by the project owner.
+          # Convert the checked-in SVG into Android density resources.
+          # Remove Flutter's generated adaptive icon XML so the supplied
+          # purple artwork is the actual launcher icon on modern Android.
+          # ---------------------------------------------------------
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq librsvg2-bin
+
+          icon_source="assets/app_icon/icon.svg"
+          test -f "$icon_source"
+
+          declare -A icon_sizes=(
+            [mdpi]=48
+            [hdpi]=72
+            [xhdpi]=96
+            [xxhdpi]=144
+            [xxxhdpi]=192
+          )
+
+          for density in "\${!icon_sizes[@]}"; do
+            size="\${icon_sizes[$density]}"
+            mkdir -p "android/app/src/main/res/mipmap-\${density}"
+            rsvg-convert -w "$size" -h "$size" "$icon_source" \
+              -o "android/app/src/main/res/mipmap-\${density}/ic_launcher.png"
+            cp "android/app/src/main/res/mipmap-\${density}/ic_launcher.png" \
+              "android/app/src/main/res/mipmap-\${density}/ic_launcher_round.png"
+          done
+
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
           python3 - <<'PY'
           from pathlib import Path
 
