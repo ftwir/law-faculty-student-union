@@ -50,14 +50,15 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             self.group_name,
             {
                 "type": "chat.message",
-                "message": saved["body"],
-                "sender": saved["sender"],
-                "sender_name": saved["sender_name"],
-                "sent_at": saved["sent_at"],
+                "payload": saved,
             },
         )
 
     async def chat_message(self, event):
+        if "payload" in event:
+            await self.send_json(event["payload"])
+            return
+
         await self.send_json({
             "message": event["message"],
             "sender": event["sender"],
