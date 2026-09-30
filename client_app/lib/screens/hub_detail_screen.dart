@@ -599,7 +599,7 @@ class _HubDetailScreenState extends State<HubDetailScreen>
     );
   }
 
-  Widget _postCard(Map<String, dynamic> post) {
+  Future<void> _showComments(Map<String, dynamic> post) async {\n    final controller = TextEditingController();\n    try {\n      var comments = await _api.getComments(post['id'] as int);\n      if (!mounted) return;\n      await showModalBottomSheet<void>(\n        context: context,\n        isScrollControlled: true,\n        builder: (_) => StatefulBuilder(\n          builder: (context, setSheet) => Padding(\n            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 12, left: 12, right: 12, top: 12),\n            child: SizedBox(\n              height: MediaQuery.of(context).size.height * .72,\n              child: Column(children: [\n                const Text('التعليقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),\n                const SizedBox(height: 10),\n                Expanded(child: comments.isEmpty ? const Center(child: Text('لا توجد تعليقات بعد.')) : ListView.builder(\n                  itemCount: comments.length,\n                  itemBuilder: (_, i) {\n                    final item = Map<String, dynamic>.from(comments[i] as Map);\n                    return ListTile(leading: const CircleAvatar(child: Icon(Icons.person)), title: Text(item['author_name']?.toString() ?? 'عضو'), subtitle: Text(item['body']?.toString() ?? ''));\n                  },\n                )),\n                Row(children: [\n                  Expanded(child: TextField(controller: controller, maxLines: 3, decoration: const InputDecoration(hintText: 'اكتب تعليقاً...', border: OutlineInputBorder()))),\n                  IconButton(icon: const Icon(Icons.send), onPressed: () async {\n                    final text = controller.text.trim();\n                    if (text.isEmpty) return;\n                    try {\n                      await _api.createComment(postId: post['id'] as int, body: text);\n                      controller.clear();\n                      comments = await _api.getComments(post['id'] as int);\n                      setSheet(() {});\n                    } catch (error) {\n                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));\n                    }\n                  }),\n                ]),\n              ]),\n            ),\n          ),\n        ),\n      );\n    } catch (error) {\n      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));\n    } finally {\n      controller.dispose();\n    }\n  }\n\n  Widget _postCard(Map<String, dynamic> post) {
     final poll = post['poll'];
     final quiz = post['quiz'];
 
@@ -650,14 +650,7 @@ class _HubDetailScreenState extends State<HubDetailScreen>
                   ),
                 ),
               ),
-            if ((post['comments'] as List?)?.isNotEmpty == true)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  (post['comments'] as List).length.toString() + ' تعليق',
-                ),
-              ),
-          ],
+            const SizedBox(height: 8),\n            OutlinedButton.icon(\n              onPressed: () => _showComments(post),\n              icon: const Icon(Icons.comment_outlined),\n              label: Text(((post['comments'] as List?)?.length ?? 0).toString() + ' تعليق'),\n            ),\n          ],
         ),
       ),
     );
