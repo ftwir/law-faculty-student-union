@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api/api_client.dart';
@@ -14,6 +18,9 @@ class _ChatScreenState extends State<ChatScreen>{
   final api=ApiClient(), input=TextEditingController(), scroll=ScrollController();
   final messages=<Map<String,dynamic>>[];
   WebSocketChannel? channel;
+  final ImagePicker picker = ImagePicker();
+  final AudioRecorder recorder = AudioRecorder();
+  bool recording = false;
   StreamSubscription? sub;
   bool loading=true;
 
@@ -34,6 +41,30 @@ class _ChatScreenState extends State<ChatScreen>{
     if(mounted)setState(()=>loading=false);
   }
 
+  Future<void> pickFile() async {
+    final result = await FilePicker.platform.pickFiles(withData: false);
+    if (result == null) return;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم اختيار الملف: ${p.basename(result.files.single.name)}')));
+  }
+
+  Future<void> pickPhoto() async {
+    final photo = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (photo == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم اختيار الصورة. رفع الصورة سيُربط بخدمة الوسائط.')));
+  }
+
+  Future<void> toggleRecording() async {
+    if (recording) {
+      await recorder.stop();
+      if (mounted) setState(() => recording = false);
+      return;
+    }
+    if (!await recorder.hasPermission()) return;
+    await recorder.start(const RecordConfig(), path: 'voice_message.m4a');
+    if (mounted) setState(() => recording = true);
+  }
+
   void send(){
     final body=input.text.trim();if(body.isEmpty)return;
     input.clear();
@@ -51,7 +82,10 @@ class _ChatScreenState extends State<ChatScreen>{
         Expanded(child:loading?const Center(child:CircularProgressIndicator()):ListView.builder(controller:scroll,padding:const EdgeInsets.all(12),itemCount:messages.length,
           itemBuilder:(_,i){final m=messages[i];return Card(child:ListTile(title:Text(m['sender_name']??''),subtitle:Text(m['body']??m['message']??'')));})),
         SafeArea(child:Padding(padding:const EdgeInsets.all(10),child:Row(children:[
-          Expanded(child:TextField(controller:input,minLines:1,maxLines:4,decoration:InputDecoration(hintText:ar?'اكتب رسالة...':'Message...'))),
+          IconButton(onPressed:pickFile,icon:const Icon(Icons.attach_file)),
+          IconButton(onPressed:pickPhoto,icon:const Icon(Icons.photo_outlined)),
+          Expanded(child:TextField(controller:input,minLines:1,maxLines:4,decoration:InputDecoration(hintText:'اكتب رسالة...'))),
+          IconButton(onPressed:toggleRecording,icon:Icon(recording ? Icons.stop_circle : Icons.mic)),
           IconButton.filled(onPressed:send,icon:const Icon(Icons.send)),
         ]))),
       ]));
