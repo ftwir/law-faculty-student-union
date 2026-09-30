@@ -393,6 +393,16 @@ class QuizViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.QuizSerializer
     permission_classes = [ReadOnlyForVisitors]
 
+    def _approved(self, profile, hub_id):
+        return (
+            profile.role == models.Role.AGENT
+            or models.HubMembership.objects.filter(
+                hub_id=hub_id,
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).exists()
+        )
+
     def get_queryset(self):
         queryset = super().get_queryset()
         profile = getattr(self.request.user, "profile", None)
@@ -408,6 +418,117 @@ class QuizViewSet(viewsets.ModelViewSet):
         if hub_id:
             queryset = queryset.filter(post__hub_id=hub_id)
         return queryset
+
+    @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated], url_path="create")
+    @transaction.atomic
+    def create_quiz(self, request):
+        profile = getattr(request.user, "profile", None)
+        if profile is None:
+            raise PermissionDenied("لا يوجد ملف شخصي لهذا الحساب.")
+
+        hub_id = request.data.get("hub")
+        title = str(request.data.get("title") or "").strip()
+        body = str(request.data.get("body") or "").strip()
+        raw_questions = request.data.get("questions") or []
+
+        try:
+            hub_id = int(hub_id)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError({"hub": "القسم غير صالح."})
+
+        if not title or not raw_questions:
+            raise serializers.ValidationError("عنوان الاختبار والأسئلة مطلوبان.")
+
+        if not self._approved(profile, hub_id):
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
+
+        if not isinstance(raw_questions, list) or len(raw_questions) > 30:
+            raise serializers.ValidationError("عدد الأسئلة يجب أن يكون بين 1 و30.")
+
+        hub = models.Hub.objects.filter(pk=hub_id).first()
+        if hub is None:
+            raise serializers.ValidationError({"hub": "القسم غير موجود."})
+
+        post = models.Post.objects.create(
+            hub=hub,
+            author=profile,
+            body=body or title,
+            post_type="quiz",
+        )
+        quiz = models.Quiz.objects.create(post=post, title=title)
+
+        for item in raw_questions:
+            if not isinstance(item, dict):
+                raise serializers.ValidationError("بيانات السؤال غير صالحة.")
+            prompt = str(item.get("prompt") or "").strip()
+            options = item.get("options")
+            correct = item.get("correct_option_index")
+            if (
+                not prompt
+                or not isinstance(options, list)
+                or len(options) < 2
+                or len(options) > 6
+            ):
+                raise serializers.ValidationError("كل سؤال يحتاج من خيارين إلى ستة خيارات.")
+            try:
+                correct = int(correct)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError("الإجابة الصحيحة غير صالحة.")
+            if correct < 0 or correct >= len(options):
+                raise serializers.ValidationError("موضع الإجابة الصحيحة غير صالح.")
+            clean_options = [str(x).strip() for x in options]
+            if any(not x for x in clean_options):
+                raise serializers.ValidationError("لا يمكن أن يكون خيار الاختبار فارغاً.")
+            models.QuizQuestion.objects.create(
+                quiz=quiz,
+                prompt=prompt,
+                options=clean_options,
+                correct_option_index=correct,
+            )
+
+        return Response(
+            serializers.QuizSerializer(quiz).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated], url_path="attempt")
+    @transaction.atomic
+    def attempt(self, request, pk=None):
+        profile = getattr(request.user, "profile", None)
+        quiz = self.get_object()
+
+        if profile is None or not self._approved(profile, quiz.post.hub_id):
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
+
+        answers = request.data.get("answers")
+        if not isinstance(answers, list):
+            raise serializers.ValidationError({"answers": "يجب إرسال إجابات الأسئلة."})
+
+        questions = list(quiz.questions.all().order_by("id"))
+        if len(answers) != len(questions):
+            raise serializers.ValidationError("يجب الإجابة عن جميع أسئلة الاختبار.")
+
+        score = 0
+        for question, answer in zip(questions, answers):
+            try:
+                answer_index = int(answer)
+            except (TypeError, ValueError):
+                answer_index = -1
+            if answer_index == question.correct_option_index:
+                score += 1
+
+        attempt = models.QuizAttempt.objects.create(
+            quiz=quiz,
+            user=profile,
+            score=score,
+        )
+        return Response({
+            "id": attempt.id,
+            "quiz": quiz.id,
+            "score": score,
+            "total": len(questions),
+            "completed_at": attempt.completed_at,
+        }, status=status.HTTP_201_CREATED)
 
 
 class FlashcardViewSet(viewsets.ModelViewSet):
