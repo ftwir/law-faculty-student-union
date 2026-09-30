@@ -393,6 +393,160 @@ class ApiClient {
 
     return [];
   }
+
+  Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> values,
+  ) async {
+    final response = await http.patch(
+      _uri('/api/auth/me/'),
+      headers: await _headers(),
+      body: jsonEncode(values),
+    );
+
+    final data = _decode(response);
+
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(data, 'Unable to update profile.'),
+        statusCode: response.statusCode,
+      );
+    }
+
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<dynamic>> getChatRooms() async {
+    final response = await http.get(
+      _uri('/api/chat-rooms/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(data, 'Unable to load chats.'),
+        statusCode: response.statusCode,
+      );
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) {
+      return data['results'];
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> createChatRoom({
+    int? hubId,
+    required String name,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'is_direct_message': false,
+    };
+    if (hubId != null) body['hub'] = hubId;
+
+    final response = await http.post(
+      _uri('/api/chat-rooms/'),
+      headers: await _headers(),
+      body: jsonEncode(body),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _errorMessage(data, 'Unable to create chat room.'),
+        statusCode: response.statusCode,
+      );
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> sendMessage(
+    int roomId,
+    String body,
+  ) async {
+    final response = await http.post(
+      _uri('/api/messages/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'room': roomId,
+        'body': body,
+      }),
+    );
+    if (response.statusCode != 201) {
+      final data = _decode(response);
+      throw ApiException(
+        _errorMessage(data, 'Unable to send message.'),
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  Future<List<dynamic>> getWiki(int hubId) async {
+    final response = await http.get(
+      _uri('/api/wiki/?hub=$hubId'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(data, 'Unable to load wiki.'),
+        statusCode: response.statusCode,
+      );
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) {
+      return data['results'];
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> createWiki({
+    required int hubId,
+    required String title,
+    required String content,
+  }) async {
+    final response = await http.post(
+      _uri('/api/wiki/'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'hub': hubId,
+        'title': title,
+        'content': content,
+        'slug': title.toLowerCase().replaceAll(RegExp(r'\\s+'), '-'),
+      }),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _errorMessage(data, 'Unable to create wiki page.'),
+        statusCode: response.statusCode,
+      );
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<dynamic>> getBadges() async {
+    final response = await http.get(
+      _uri('/api/user-badges/'),
+      headers: await _headers(),
+    );
+    final data = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _errorMessage(data, 'Unable to load badges.'),
+        statusCode: response.statusCode,
+      );
+    }
+    if (data is List) return data;
+    if (data is Map<String, dynamic> && data['results'] is List) {
+      return data['results'];
+    }
+    return [];
+  }
+
+  Future<String?> authToken() async {
+    return _token;
+  }
+
 }
 
 
