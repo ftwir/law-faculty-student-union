@@ -107,10 +107,11 @@ class HubSerializer(serializers.ModelSerializer):
 
 class HubMembershipSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source="user.display_name", read_only=True)
+    user_role = serializers.CharField(source="user.role", read_only=True)
 
     class Meta:
         model = models.HubMembership
-        fields = ["id", "hub", "user", "user_name", "role", "status", "joined_at"]
+        fields = ["id", "hub", "user", "user_name", "user_role", "role", "status", "joined_at"]
         read_only_fields = ["id", "user_name", "joined_at"]
 
 
