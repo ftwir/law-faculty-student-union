@@ -135,14 +135,83 @@ class MeView(APIView):
 
 
 class HubViewSet(viewsets.ModelViewSet):
-    queryset = models.Hub.objects.all().order_by("-created_at")
+    queryset = models.Hub.objects.select_related("hub_admin", "created_by").all().order_by("id")
     serializer_class = serializers.HubSerializer
     permission_classes = [ReadOnlyForVisitors]
 
     def perform_create(self, serializer):
-        serializer.save(
-            created_by=self.request.user.profile
+        profile = self.request.user.profile
+        if profile.role != models.Role.AGENT:
+            raise PermissionDenied("Only the Agent can create hubs.")
+        serializer.save(created_by=profile, hub_admin=profile, is_public=False)
+
+    def _can_manage(self, profile, hub):
+        return bool(profile and (profile.role == models.Role.AGENT or hub.hub_admin_id == profile.id))
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def request_membership(self, request, pk=None):
+        hub = self.get_object()
+        profile = request.user.profile
+        membership, _ = models.HubMembership.objects.get_or_create(
+            hub=hub, user=profile,
+            defaults={"status": models.HubMembershipStatus.PENDING},
         )
+        if membership.status == models.HubMembershipStatus.APPROVED:
+            return Response({"status": "approved"})
+        membership.status = models.HubMembershipStatus.PENDING
+        membership.save(update_fields=["status"])
+        return Response({"status": "pending"}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
+    def membership_requests(self, request, pk=None):
+        hub = self.get_object()
+        if not self._can_manage(request.user.profile, hub):
+            raise PermissionDenied("Only the hub administrator can manage membership requests.")
+        queryset = hub.memberships.filter(
+            status=models.HubMembershipStatus.PENDING
+        ).select_related("user").order_by("joined_at")
+        return Response(serializers.HubMembershipSerializer(queryset, many=True).data)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def approve_member(self, request, pk=None):
+        hub = self.get_object()
+        if not self._can_manage(request.user.profile, hub):
+            raise PermissionDenied("Only the hub administrator can approve members.")
+        membership = hub.memberships.filter(
+            user_id=request.data.get("user_id"),
+            status=models.HubMembershipStatus.PENDING,
+        ).first()
+        if not membership:
+            return Response({"detail": "طلب العضوية غير موجود."}, status=status.HTTP_404_NOT_FOUND)
+        membership.status = models.HubMembershipStatus.APPROVED
+        membership.save(update_fields=["status"])
+        return Response(serializers.HubMembershipSerializer(membership).data)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def reject_member(self, request, pk=None):
+        hub = self.get_object()
+        if not self._can_manage(request.user.profile, hub):
+            raise PermissionDenied("Only the hub administrator can reject members.")
+        membership = hub.memberships.filter(user_id=request.data.get("user_id")).first()
+        if not membership:
+            return Response({"detail": "عضوية المستخدم غير موجودة."}, status=status.HTTP_404_NOT_FOUND)
+        membership.status = models.HubMembershipStatus.REJECTED
+        membership.save(update_fields=["status"])
+        return Response(serializers.HubMembershipSerializer(membership).data)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def set_admin(self, request, pk=None):
+        hub = self.get_object()
+        if request.user.profile.role != models.Role.AGENT:
+            raise PermissionDenied("Only the Agent can assign hub administrators.")
+        admin_profile = models.User.objects.filter(
+            id=request.data.get("user_id"), role=models.Role.ADMIN
+        ).first()
+        if not admin_profile:
+            return Response({"detail": "يجب اختيار حساب Admin موجود."}, status=status.HTTP_400_BAD_REQUEST)
+        hub.hub_admin = admin_profile
+        hub.save(update_fields=["hub_admin"])
+        return Response(serializers.HubSerializer(hub, context={"request": request}).data)
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -155,21 +224,32 @@ class PostViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.PostSerializer
     permission_classes = [ReadOnlyForVisitors]
 
+    def _approved_hub_ids(self, profile):
+        if profile.role == models.Role.AGENT:
+            return models.Hub.objects.values_list("id", flat=True)
+        return models.HubMembership.objects.filter(
+            user=profile, status=models.HubMembershipStatus.APPROVED
+        ).values_list("hub_id", flat=True)
+
     def get_queryset(self):
         queryset = super().get_queryset()
-
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return queryset.none()
+        queryset = queryset.filter(hub_id__in=self._approved_hub_ids(profile))
         hub_id = self.request.query_params.get("hub")
-
         if hub_id:
             queryset = queryset.filter(hub_id=hub_id)
-
         return queryset
 
-
     def perform_create(self, serializer):
-        serializer.save(
-            author=self.request.user.profile
-        )
+        profile = self.request.user.profile
+        hub = serializer.validated_data["hub"]
+        if profile.role != models.Role.AGENT and not models.HubMembership.objects.filter(
+            hub=hub, user=profile, status=models.HubMembershipStatus.APPROVED
+        ).exists():
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
+        serializer.save(author=profile)
 
 
 class CommentViewSet(viewsets.ModelViewSet):
