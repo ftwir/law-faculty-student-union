@@ -1,21 +1,12 @@
 """
 core/models.py
-Law Faculty Student Union — fresh Django project
-Covers: roles & permissions, Hubs (communities), posts with interactive
-content (polls, quizzes, flashcards), chat, and a gamification layer.
-
-Assumes Django 5.x + PostgreSQL. Add this app ("core") to INSTALLED_APPS.
+Law Faculty Student Union — community models.
 """
 
 import uuid
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 
-
-# ---------------------------------------------------------------------------
-# 1. Users & Roles
-# ---------------------------------------------------------------------------
 
 class Role(models.TextChoices):
     AGENT = "agent", "Agent (Super Admin)"
@@ -25,17 +16,13 @@ class Role(models.TextChoices):
 
 
 class User(models.Model):
-    """
-    Extend your actual auth user (e.g. AbstractUser) with these fields,
-    or keep this as a OneToOne profile attached to settings.AUTH_USER_MODEL.
-    """
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
-    )
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
     student_id = models.CharField(max_length=32, unique=True, null=True, blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.MEMBER)
     display_name = models.CharField(max_length=64)
     avatar_url = models.URLField(blank=True)
+    bio = models.TextField(blank=True)
+    academic_year = models.CharField(max_length=32, blank=True)
     points = models.PositiveIntegerField(default=0)
     level = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -45,7 +32,6 @@ class User(models.Model):
 
 
 class HubPermission(models.TextChoices):
-    """Fine-grained, togglable permissions for Administrators (per platform, not per hub)."""
     MANAGE_USERS = "manage_users", "Manage Users"
     MANAGE_HUBS = "manage_hubs", "Manage Hubs"
     MODERATE_CONTENT = "moderate_content", "Moderate Content"
@@ -54,7 +40,6 @@ class HubPermission(models.TextChoices):
 
 
 class AdminPermissionGrant(models.Model):
-    """Lets the Agent toggle specific permissions per Administrator."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="permission_grants")
     permission = models.CharField(max_length=32, choices=HubPermission.choices)
     granted_at = models.DateTimeField(auto_now_add=True)
@@ -63,16 +48,12 @@ class AdminPermissionGrant(models.Model):
         unique_together = ("user", "permission")
 
 
-# ---------------------------------------------------------------------------
-# 2. Hubs (communities/clubs) & membership
-# ---------------------------------------------------------------------------
-
 class Hub(models.Model):
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     cover_image_url = models.URLField(blank=True)
-    is_public = models.BooleanField(default=True)  # False = members must request to join
+    is_public = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -96,20 +77,14 @@ class HubMembership(models.Model):
         unique_together = ("hub", "user")
 
 
-# ---------------------------------------------------------------------------
-# 3. Posts & interactive content
-# ---------------------------------------------------------------------------
-
 class Post(models.Model):
     hub = models.ForeignKey(Hub, on_delete=models.CASCADE, related_name="posts")
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="posts")
     body = models.TextField()
     image_url = models.URLField(blank=True)
+    post_type = models.CharField(max_length=16, default="post")
     created_at = models.DateTimeField(auto_now_add=True)
     is_pinned = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"{self.author.display_name}: {self.body[:40]}"
 
 
 class Comment(models.Model):
@@ -149,7 +124,7 @@ class QuizQuestion(models.Model):
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name="questions")
     prompt = models.TextField()
     correct_option_index = models.PositiveSmallIntegerField()
-    options = models.JSONField(help_text="List of option strings, e.g. ['A', 'B', 'C', 'D']")
+    options = models.JSONField(help_text="List of option strings")
 
 
 class QuizAttempt(models.Model):
@@ -166,14 +141,42 @@ class Flashcard(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 
 
-# ---------------------------------------------------------------------------
-# 4. Chat
-# ---------------------------------------------------------------------------
+class WikiPage(models.Model):
+    hub = models.ForeignKey(Hub, on_delete=models.CASCADE, related_name="wiki_pages")
+    title = models.CharField(max_length=160)
+    slug = models.SlugField()
+    summary = models.TextField(blank=True)
+    content = models.TextField()
+    cover_image_url = models.URLField(blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="wiki_pages_created")
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="wiki_pages_updated")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("hub", "slug")
+        ordering = ("-updated_at",)
+
+
+class ContentReport(models.Model):
+    STATUS_CHOICES = (
+        ("open", "Open"),
+        ("reviewing", "Reviewing"),
+        ("resolved", "Resolved"),
+        ("dismissed", "Dismissed"),
+    )
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reports_created")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, null=True, blank=True, related_name="reports")
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True, blank=True, related_name="reports")
+    reason = models.TextField()
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="open")
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="reports_resolved")
+
 
 class ChatRoom(models.Model):
-    """A chat room can belong to a Hub (group chat) or be a 1:1 DM (hub=None)."""
     hub = models.ForeignKey(Hub, on_delete=models.CASCADE, null=True, blank=True, related_name="chat_rooms")
-    name = models.CharField(max_length=100, blank=True)  # blank for DMs
+    name = models.CharField(max_length=100, blank=True)
     is_direct_message = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -195,10 +198,6 @@ class Message(models.Model):
     read_by = models.ManyToManyField(User, related_name="read_messages", blank=True)
 
 
-# ---------------------------------------------------------------------------
-# 5. Gamification
-# ---------------------------------------------------------------------------
-
 class Badge(models.Model):
     name = models.CharField(max_length=80)
     description = models.TextField(blank=True)
@@ -214,10 +213,6 @@ class UserBadge(models.Model):
     class Meta:
         unique_together = ("user", "badge")
 
-
-# ---------------------------------------------------------------------------
-# 6. Notifications
-# ---------------------------------------------------------------------------
 
 class Notification(models.Model):
     class Kind(models.TextChoices):
