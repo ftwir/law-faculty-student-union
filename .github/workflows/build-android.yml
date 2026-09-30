@@ -31,12 +31,6 @@ jobs:
           flutter create --platforms=android .
           rm -f test/widget_test.dart
 
-          # ---------------------------------------------------------
-          # Purple LSU launcher icon supplied by the project owner.
-          # Convert the checked-in SVG into Android density resources.
-          # Remove Flutter's generated adaptive icon XML so the supplied
-          # purple artwork is the actual launcher icon on modern Android.
-          # ---------------------------------------------------------
           sudo apt-get update -qq
           sudo apt-get install -y -qq librsvg2-bin
 
@@ -51,13 +45,13 @@ jobs:
             [xxxhdpi]=192
           )
 
-          for density in "\${!icon_sizes[@]}"; do
-            size="\${icon_sizes[$density]}"
-            mkdir -p "android/app/src/main/res/mipmap-\${density}"
+          for density in "${!icon_sizes[@]}"; do
+            size="${icon_sizes[$density]}"
+            mkdir -p "android/app/src/main/res/mipmap-${density}"
             rsvg-convert -w "$size" -h "$size" "$icon_source" \
-              -o "android/app/src/main/res/mipmap-\${density}/ic_launcher.png"
-            cp "android/app/src/main/res/mipmap-\${density}/ic_launcher.png" \
-              "android/app/src/main/res/mipmap-\${density}/ic_launcher_round.png"
+              -o "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+            cp "android/app/src/main/res/mipmap-${density}/ic_launcher.png" \
+              "android/app/src/main/res/mipmap-${density}/ic_launcher_round.png"
           done
 
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
@@ -65,82 +59,64 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          # ---------------------------------------------------------
-          # Android networking permission
-          # ---------------------------------------------------------
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
-
-          permission = (
-              '<uses-permission '
-              'android:name="android.permission.INTERNET"/>'
-          )
+          permission = '<uses-permission android:name="android.permission.INTERNET"/>'
 
           if permission not in text:
               text = text.replace(
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
-                  f'    {permission}',
+                  '    ' + permission,
+                  1,
               )
-
           manifest.write_text(text)
 
-          # ---------------------------------------------------------
-          # Stable unique application ID
-          #
-          # This prevents Android from treating the new LSU APK as
-          # an incompatible update of an older package.
-          # ---------------------------------------------------------
-          # Flutter 3.47+ generates Kotlin DSL (build.gradle.kts).
-          # Support the generated format directly; keep legacy Groovy only
-          # for compatibility with older Flutter toolchains.
           kts = Path("android/app/build.gradle.kts")
           groovy = Path("android/app/build.gradle")
 
           if kts.exists():
               text = kts.read_text()
-              old = 'applicationId = "com.example.law_union_client"'
-              new = 'applicationId = "ly.edu.sirt.lawunion"'
-
-              if old in text:
-                  text = text.replace(old, new, 1)
-              elif 'applicationId = "' not in text:
+              if 'applicationId = "' in text:
+                  text = re.sub(
+                      r'applicationId = "[^"]+"',
+                      'applicationId = "ly.edu.sirt.lawunion"',
+                      text,
+                      count=1,
+                  )
+              else:
                   raise SystemExit("Could not locate applicationId in build.gradle.kts.")
-
               kts.write_text(text)
-
           elif groovy.exists():
               text = groovy.read_text()
-              old = 'applicationId "com.example.law_union_client"'
-              new = 'applicationId "ly.edu.sirt.lawunion"'
-
-              if old in text:
-                  text = text.replace(old, new, 1)
-              elif "applicationId " not in text:
+              if "applicationId " in text:
+                  text = re.sub(
+                      r'applicationId "[^"]+"',
+                      'applicationId "ly.edu.sirt.lawunion"',
+                      text,
+                      count=1,
+                  )
+              else:
                   raise SystemExit("Could not locate applicationId in build.gradle.")
-
               groovy.write_text(text)
-
           else:
               raise SystemExit("No Android app Gradle file was generated.")
+
+          strings_file = Path("android/app/src/main/res/values/strings.xml")
+          if strings_file.exists():
+              text = strings_file.read_text()
+              text = re.sub(
+                  r'<string name="app_name">.*?</string>',
+                  '<string name="app_name">قاعة الاتحاد</string>',
+                  text,
+              )
+              strings_file.write_text(text)
           PY
 
           echo "Android INTERNET permission:"
           grep -n "INTERNET" android/app/src/main/AndroidManifest.xml || true
-
-          echo "Arabic application name:"
-          strings_file="android/app/src/main/res/values/strings.xml"
-          if [ -f "$strings_file" ]; then
-            python3 - <<'PY'
-from pathlib import Path
-p = Path("android/app/src/main/res/values/strings.xml")
-s = p.read_text()
-import re
-s = re.sub(r'<string name="app_name">.*?</string>', '<string name="app_name">قاعة الاتحاد</string>', s)
-p.write_text(s)
-PY
-          fi
 
           echo "Android application ID:"
           if [ -f android/app/build.gradle.kts ]; then
@@ -169,24 +145,13 @@ PY
         working-directory: client_app
         run: |
           APK="build/app/outputs/flutter-apk/app-release.apk"
-
           test -f "$APK"
-
-          echo "APK information:"
           ls -lh "$APK"
-
-          echo "APK archive test:"
           unzip -t "$APK" >/dev/null
-
-          echo "APK package information:"
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt" \
             dump badging "$APK" | head -20
-
-          echo "APK signature verification:"
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" \
-            verify \
-            --verbose \
-            "$APK"
+            verify --verbose "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
