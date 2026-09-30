@@ -135,11 +135,18 @@ class PollOptionSerializer(serializers.ModelSerializer):
 
 
 class PollSerializer(serializers.ModelSerializer):
-    options = PollOptionSerializer(many=True, read_only=True)
+    options = PollOptionSerializer(many=True, required=False)
 
     class Meta:
         model = models.Poll
         fields = ["id", "post", "question", "closes_at", "options"]
+
+    def create(self, validated_data):
+        options = validated_data.pop("options", [])
+        poll = models.Poll.objects.create(**validated_data)
+        for option in options:
+            models.PollOption.objects.create(poll=poll, **option)
+        return poll
 
 
 class QuizQuestionSerializer(serializers.ModelSerializer):
