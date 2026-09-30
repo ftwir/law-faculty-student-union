@@ -256,16 +256,38 @@ class PostViewSet(viewsets.ModelViewSet):
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = (
         models.Comment.objects
-        .select_related("post", "author")
+        .select_related("post", "post__hub", "author")
         .order_by("created_at")
     )
     serializer_class = serializers.CommentSerializer
     permission_classes = [ReadOnlyForVisitors]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        profile = getattr(self.request.user, "profile", None)
+        if profile is None:
+            return queryset.none()
+        if profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).values_list("hub_id", flat=True)
+            queryset = queryset.filter(post__hub_id__in=approved)
+        post_id = self.request.query_params.get("post")
+        if post_id:
+            queryset = queryset.filter(post_id=post_id)
+        return queryset
+
     def perform_create(self, serializer):
-        serializer.save(
-            author=self.request.user.profile
-        )
+        profile = self.request.user.profile
+        post = serializer.validated_data["post"]
+        if profile.role != models.Role.AGENT and not models.HubMembership.objects.filter(
+            hub=post.hub,
+            user=profile,
+            status=models.HubMembershipStatus.APPROVED,
+        ).exists():
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
+        serializer.save(author=profile)
 
 
 class PollViewSet(viewsets.ModelViewSet):
@@ -292,6 +314,16 @@ class PollViewSet(viewsets.ModelViewSet):
         if hub_id:
             queryset = queryset.filter(post__hub_id=hub_id)
         return queryset
+
+    def perform_create(self, serializer):
+        profile = self.request.user.profile
+        post = serializer.validated_data["post"]
+        if profile.role != models.Role.AGENT and not models.HubMembership.objects.filter(
+            hub=post.hub, user=profile,
+            status=models.HubMembershipStatus.APPROVED,
+        ).exists():
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
+        serializer.save()
 
 
 class PollVoteView(APIView):
