@@ -525,7 +525,7 @@ class ApiClient {
     return Map<String, dynamic>.from(data as Map);
   }
 
-  Future<void> sendAttachment({
+  Future<Map<String, dynamic>> sendAttachment({
     required int roomId,
     required String filePath,
     String? body,
@@ -558,6 +558,7 @@ class ApiClient {
         statusCode: response.statusCode,
       );
     }
+    return Map<String, dynamic>.from(data as Map);
   }
 
   Future<void> sendMessage(
