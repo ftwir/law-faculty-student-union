@@ -590,6 +590,7 @@ class ApiClient {
       body: jsonEncode({
         'post': postId,
         'question': question,
+        'options': options.map((text) => {'text': text}).toList(),
         if (closesAt != null) 'closes_at': closesAt.toUtc().toIso8601String(),
       }),
     );
