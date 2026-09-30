@@ -9,6 +9,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import PermissionDenied
 
 from . import models, serializers
@@ -620,6 +621,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.MessageSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         profile = getattr(self.request.user, "profile", None)
@@ -656,9 +658,18 @@ class MessageViewSet(viewsets.ModelViewSet):
                 "You are not a participant in this chat room."
             )
 
-        serializer.save(
-            sender=profile
-        )
+        body = str(serializer.validated_data.get("body") or "").strip()
+        attachment = serializer.validated_data.get("attachment")
+        if not body and not attachment:
+            raise serializers.ValidationError("يجب إرسال نص أو ملف.")
+        if attachment:
+            serializer.save(
+                sender=profile,
+                attachment_name=getattr(attachment, "name", ""),
+                attachment_type=getattr(attachment, "content_type", "") or "",
+            )
+        else:
+            serializer.save(sender=profile)
 
 
 class BadgeViewSet(viewsets.ModelViewSet):
