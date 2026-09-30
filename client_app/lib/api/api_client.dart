@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -522,6 +523,41 @@ class ApiClient {
       );
     }
     return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> sendAttachment({
+    required int roomId,
+    required String filePath,
+    String? body,
+  }) async {
+    final token = await _token;
+    final request = http.MultipartRequest(
+      'POST',
+      _uri('/api/messages/'),
+    );
+    request.headers['Accept'] = 'application/json';
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Token $token';
+    }
+    if (body != null && body.trim().isNotEmpty) {
+      request.fields['body'] = body.trim();
+    }
+    request.fields['room'] = roomId.toString();
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'attachment',
+        filePath,
+      ),
+    );
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final data = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(
+        _errorMessage(data, 'تعذر إرسال الملف.'),
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   Future<void> sendMessage(
