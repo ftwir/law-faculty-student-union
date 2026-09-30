@@ -57,27 +57,90 @@ class Command(BaseCommand):
 
         profile.save()
 
-        # Bootstrap the first real community only when the database has none.
-        # This prevents a fresh deployment from showing an empty Communities
-        # screen while leaving any communities created later untouched.
-        if not Hub.objects.exists():
-            hub = Hub.objects.create(
-                name="Law Faculty Student Union",
-                slug=slugify("Law Faculty Student Union"),
-                description="The official community for Law Faculty students and the Student Union.",
-                is_public=True,
+        # Bootstrap the five fixed faculty hubs.
+        # Every hub is private: members must request access and be approved
+        # by that hub's administrator.
+        hub_specs = [
+            (
+                "عام - جميع السنوات",
+                "general",
+                "القسم العام لجميع طلبة كلية القانون.",
+            ),
+            (
+                "السنة الأولى",
+                "year-1",
+                "مجتمع طلبة السنة الأولى.",
+            ),
+            (
+                "السنة الثانية",
+                "year-2",
+                "مجتمع طلبة السنة الثانية.",
+            ),
+            (
+                "السنة الثالثة",
+                "year-3",
+                "مجتمع طلبة السنة الثالثة.",
+            ),
+            (
+                "السنة الرابعة",
+                "year-4",
+                "مجتمع طلبة السنة الرابعة.",
+            ),
+        ]
+
+        existing_hubs = list(Hub.objects.order_by("id"))
+
+        # Convert the old single default hub into the new general hub.
+        if existing_hubs:
+            general = existing_hubs[0]
+            general.name = hub_specs[0][0]
+            general.slug = hub_specs[0][1]
+            general.description = hub_specs[0][2]
+            general.is_public = False
+            general.hub_admin = profile
+            general.save()
+        else:
+            general = Hub.objects.create(
+                name=hub_specs[0][0],
+                slug=hub_specs[0][1],
+                description=hub_specs[0][2],
+                is_public=False,
                 created_by=profile,
+                hub_admin=profile,
             )
-            HubMembership.objects.get_or_create(
-                hub=hub,
-                user=profile,
-                defaults={"role": HubMembershipRole.LEADER},
+
+        HubMembership.objects.update_or_create(
+            hub=general,
+            user=profile,
+            defaults={
+                "role": HubMembershipRole.LEADER,
+                "status": "approved",
+            },
+        )
+
+        for name, slug, description in hub_specs[1:]:
+            hub, _ = Hub.objects.get_or_create(
+                slug=slug,
+                defaults={
+                    "name": name,
+                    "description": description,
+                    "is_public": False,
+                    "created_by": profile,
+                    "hub_admin": profile,
+                },
             )
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Default community created: {hub.name}"
-                )
+            hub.name = name
+            hub.description = description
+            hub.is_public = False
+            if hub.hub_admin_id is None:
+                hub.hub_admin = profile
+            hub.save(update_fields=["name", "description", "is_public", "hub_admin"])
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Default hub structure ready: general + years 1-4."
             )
+        )
 
         action = "created" if created else "updated"
         self.stdout.write(
