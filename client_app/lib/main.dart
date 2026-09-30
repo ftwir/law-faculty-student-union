@@ -25,9 +25,9 @@ class LawUnionApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: (context, child) => const Directionality(
+      builder: (context, child) => Directionality(
         textDirection: TextDirection.rtl,
-        child: child!,
+        child: child ?? const SizedBox.shrink(),
       ),
       home: const LoginScreen(),
     );
