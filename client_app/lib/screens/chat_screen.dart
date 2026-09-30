@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api/api_client.dart';
@@ -45,23 +46,97 @@ class _ChatScreenState extends State<ChatScreen>{
     final result = await FilePicker.platform.pickFiles(withData: false);
     if (result == null) return;
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم اختيار الملف: ${p.basename(result.files.single.name)}')));
+    final path = result.files.single.path;
+    if (path == null) return;
+    try {
+      await api.sendAttachment(
+        roomId: widget.room['id'],
+        filePath: path,
+      );
+      if (mounted) {
+        setState(() {
+          messages.add({
+            'sender_name': 'أنت',
+            'body': '📎 ' + p.basename(path),
+            'attachment_name': p.basename(path),
+          });
+        });
+        scrollBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إرسال الملف: $e')),
+        );
+      }
+    }
   }
 
   Future<void> pickPhoto() async {
     final photo = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (photo == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم اختيار الصورة. رفع الصورة سيُربط بخدمة الوسائط.')));
+    if (photo == null) return;
+    try {
+      await api.sendAttachment(
+        roomId: widget.room['id'],
+        filePath: photo.path,
+      );
+      if (mounted) {
+        setState(() {
+          messages.add({
+            'sender_name': 'أنت',
+            'body': '🖼️ صورة',
+            'attachment_name': p.basename(photo.path),
+            'attachment_type': 'image',
+          });
+        });
+        scrollBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر إرسال الصورة: $e')),
+        );
+      }
+    }
   }
 
   Future<void> toggleRecording() async {
     if (recording) {
-      await recorder.stop();
+      final path = await recorder.stop();
       if (mounted) setState(() => recording = false);
+      if (path == null) return;
+      try {
+        await api.sendAttachment(
+          roomId: widget.room['id'],
+          filePath: path,
+        );
+        if (mounted) {
+          setState(() {
+            messages.add({
+              'sender_name': 'أنت',
+              'body': '🎤 رسالة صوتية',
+              'attachment_name': p.basename(path),
+              'attachment_type': 'audio/mp4',
+            });
+          });
+          scrollBottom();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('تعذر إرسال التسجيل: $e')),
+          );
+        }
+      }
       return;
     }
     if (!await recorder.hasPermission()) return;
-    await recorder.start(const RecordConfig(), path: 'voice_message.m4a');
+    final directory = await getTemporaryDirectory();
+    final path = p.join(
+      directory.path,
+      'voice_${DateTime.now().millisecondsSinceEpoch}.m4a',
+    );
+    await recorder.start(const RecordConfig(), path: path);
     if (mounted) setState(() => recording = true);
   }
 
