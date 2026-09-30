@@ -117,6 +117,84 @@ class _HubDetailScreenState extends State<HubDetailScreen>
     }
   }
 
+  Future<void> _commentOnPost(int postId) async {
+    final c = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('إضافة تعليق'),
+        content: TextField(
+          controller: c,
+          minLines: 2,
+          maxLines: 5,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'اكتب تعليقك...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إرسال')),
+        ],
+      ),
+    );
+    final body = c.text.trim();
+    c.dispose();
+    if (ok != true || body.isEmpty) return;
+    try {
+      await _api.createComment(postId: postId, body: body);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _createPoll() async {
+    final body = TextEditingController();
+    final question = TextEditingController();
+    final options = List.generate(2, (_) => TextEditingController());
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(builder: (context, setDialog) {
+        return AlertDialog(
+          title: const Text('استطلاع جديد'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: body, decoration: const InputDecoration(labelText: 'وصف المنشور')),
+              TextField(controller: question, decoration: const InputDecoration(labelText: 'السؤال')),
+              const SizedBox(height: 8),
+              ...options.asMap().entries.map((e) => Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: TextField(controller: e.value, decoration: InputDecoration(labelText: 'الخيار ' + (e.key + 1).toString())),
+              )),
+              if (options.length < 6)
+                TextButton.icon(
+                  onPressed: () => setDialog(() => options.add(TextEditingController())),
+                  icon: const Icon(Icons.add),
+                  label: const Text('إضافة خيار'),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('نشر')),
+          ],
+        );
+      }),
+    );
+    final values = options.map((x) => x.text.trim()).where((x) => x.isNotEmpty).toList();
+    final b = body.text.trim(), q = question.text.trim();
+    for (final x in options) x.dispose();
+    body.dispose(); question.dispose();
+    if (ok != true || b.isEmpty || q.isEmpty || values.length < 2) return;
+    try {
+      // The backend currently creates the poll shell; option creation will be wired
+      // through the poll management endpoint in the next backend pass.
+      await _api.createPoll(hubId: _hub.id, body: b, question: q, options: values);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _createRoom() async {
     final c = TextEditingController();
     final ok = await showDialog<bool>(
@@ -326,7 +404,22 @@ class _HubDetailScreenState extends State<HubDetailScreen>
         children: [
           _hubHeader(),
           const SizedBox(height: 10),
-          Card(
+          Row(children: [
+            Expanded(child: Card(child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.edit)),
+              title: const Text('شارك مع القسم'),
+              subtitle: const Text('منشور عادي'),
+              onTap: _publishPost,
+            ))),
+            const SizedBox(width: 8),
+            Card(child: IconButton(
+              tooltip: 'استطلاع جديد',
+              onPressed: _createPoll,
+              icon: const Icon(Icons.poll),
+            )),
+          ]),
+          const SizedBox(height: 10),
+          /* old composer removed */ Card(
             child: ListTile(
               leading: const CircleAvatar(child: Icon(Icons.edit)),
               title: const Text('شارك مع القسم'),
