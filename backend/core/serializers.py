@@ -218,11 +218,24 @@ class ChatRoomSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source="sender.display_name", read_only=True)
+    attachment_url = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Message
-        fields = ["id", "room", "sender", "sender_name", "body", "sent_at"]
-        read_only_fields = ["id", "sender", "sender_name", "sent_at"]
+        fields = [
+            "id", "room", "sender", "sender_name", "body",
+            "attachment_url", "attachment_name", "attachment_type", "sent_at",
+        ]
+        read_only_fields = [
+            "id", "sender", "sender_name", "attachment_url", "sent_at",
+        ]
+
+    def get_attachment_url(self, obj):
+        if not obj.attachment:
+            return ""
+        request = self.context.get("request")
+        url = obj.attachment.url
+        return request.build_absolute_uri(url) if request else url
 
 
 class BadgeSerializer(serializers.ModelSerializer):
