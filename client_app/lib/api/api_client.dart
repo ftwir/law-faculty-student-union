@@ -511,7 +511,7 @@ class ApiClient {
         'hub': hubId,
         'title': title,
         'content': content,
-        'slug': title.toLowerCase().replaceAll(RegExp(r'\\s+'), '-'),
+        'slug': title.toLowerCase().replaceAll(RegExp(r'\s+'), '-'),
       }),
     );
     final data = _decode(response);
