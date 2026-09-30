@@ -365,23 +365,39 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         if profile is None:
             return models.ChatRoom.objects.none()
 
-        return (
+        rooms = (
             models.ChatRoom.objects
             .filter(participants__user=profile)
+            .select_related("hub")
             .distinct()
             .order_by("-created_at")
         )
+        if profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).values_list("hub_id", flat=True)
+            rooms = rooms.filter(
+                models.Q(hub__isnull=True) | models.Q(hub_id__in=approved)
+            )
+        return rooms
 
     @transaction.atomic
     def perform_create(self, serializer):
         profile = self.request.user.profile
+        hub = serializer.validated_data.get("hub")
+
+        if hub is not None and profile.role != models.Role.AGENT:
+            approved = models.HubMembership.objects.filter(
+                hub=hub,
+                user=profile,
+                status=models.HubMembershipStatus.APPROVED,
+            ).exists()
+            if not approved:
+                raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
 
         room = serializer.save()
-
-        models.ChatParticipant.objects.get_or_create(
-            room=room,
-            user=profile,
-        )
+        models.ChatParticipant.objects.get_or_create(room=room, user=profile)
 
 
 class MessageViewSet(viewsets.ModelViewSet):
