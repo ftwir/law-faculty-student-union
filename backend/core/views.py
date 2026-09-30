@@ -173,6 +173,16 @@ class HubViewSet(viewsets.ModelViewSet):
         ).select_related("user").order_by("joined_at")
         return Response(serializers.HubMembershipSerializer(queryset, many=True).data)
 
+    @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
+    def members(self, request, pk=None):
+        hub = self.get_object()
+        if not self._can_manage(request.user.profile, hub):
+            raise PermissionDenied("Only the hub administrator can view members.")
+        queryset = hub.memberships.filter(
+            status=models.HubMembershipStatus.APPROVED
+        ).select_related("user").order_by("user__display_name")
+        return Response(serializers.HubMembershipSerializer(queryset, many=True).data)
+
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def approve_member(self, request, pk=None):
         hub = self.get_object()
