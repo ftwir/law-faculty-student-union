@@ -6,6 +6,11 @@ on:
       - main
   workflow_dispatch:
 
+# Keep Android builds serialized so artifacts and run numbers stay easy to track.
+concurrency:
+  group: new-lsu-android-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
