@@ -340,7 +340,7 @@ class PollViewSet(viewsets.ModelViewSet):
 
 
 class PollVoteView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ReadOnlyForVisitors]
 
     def post(self, request, option_id):
         profile = getattr(request.user, "profile", None)
@@ -362,6 +362,13 @@ class PollVoteView(APIView):
             )
 
         poll = option.poll
+
+        if profile.role != models.Role.AGENT and not models.HubMembership.objects.filter(
+            hub=poll.post.hub,
+            user=profile,
+            status=models.HubMembershipStatus.APPROVED,
+        ).exists():
+            raise PermissionDenied("يجب قبول عضويتك في هذا القسم أولاً.")
 
         if poll.closes_at and timezone.now() >= poll.closes_at:
             return Response(
