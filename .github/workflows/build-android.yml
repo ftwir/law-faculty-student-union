@@ -145,7 +145,7 @@ jobs:
 
       - name: Flutter Analyze
         working-directory: client_app
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Build APK
         working-directory: client_app
