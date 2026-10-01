@@ -62,6 +62,11 @@ jobs:
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
 
+          # file_picker/flutter_plugin_android_lifecycle now requires Android API 36.
+          # Install the platform explicitly and force the generated Flutter project to compile against it.
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" >/dev/null
+
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -117,6 +122,27 @@ jobs:
               groovy.write_text(text)
           else:
               raise SystemExit("No Android app Gradle file was generated.")
+
+          # Flutter's generated template currently uses flutter.compileSdkVersion (34 on
+          # this runner). Override it because the resolved Android plugins require API 36.
+          if kts.exists():
+              text = kts.read_text()
+              if "compileSdk = flutter.compileSdkVersion" in text:
+                  text = text.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36", 1)
+              elif re.search(r"compileSdk\s*=\s*\\d+", text):
+                  text = re.sub(r"compileSdk\s*=\s*\\d+", "compileSdk = 36", text, count=1)
+              else:
+                  raise SystemExit("Could not locate compileSdk in build.gradle.kts.")
+              kts.write_text(text)
+          else:
+              text = groovy.read_text()
+              if "flutter.compileSdkVersion" in text:
+                  text = text.replace("flutter.compileSdkVersion", "36", 1)
+              elif re.search(r"compileSdkVersion\\s+\\d+", text):
+                  text = re.sub(r"compileSdkVersion\\s+\\d+", "compileSdkVersion 36", text, count=1)
+              else:
+                  raise SystemExit("Could not locate compileSdkVersion in build.gradle.")
+              groovy.write_text(text)
 
           strings_file = Path("android/app/src/main/res/values/strings.xml")
           if strings_file.exists():
