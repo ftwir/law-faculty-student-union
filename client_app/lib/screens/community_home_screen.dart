@@ -152,7 +152,7 @@ class _CommunityHomeScreenState extends State<CommunityHomeScreen> {
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(color: AppColors.surface),
             accountName: Text(displayName.isEmpty ? username : displayName),
-            accountEmail: username.isEmpty ? '' : '@$username',
+            accountEmail: Text(username.isEmpty ? '' : '@$username'),
             currentAccountPicture: CircleAvatar(
               backgroundColor: AppColors.primaryPurple,
               child: Text(displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase()),
