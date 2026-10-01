@@ -13,6 +13,7 @@ services:
   - type: web
     name: law-union-backend
     runtime: python
+    rootDir: backend/
     plan: free
     region: frankfurt
     buildCommand: >
